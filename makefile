@@ -9,7 +9,7 @@ HDRS = server/inc/server.h
 OBJS = $(SRCS:.c=.o)
 
 # Executable name
-EXEC = my_server
+EXEC = bin/my_server
 
 # Default rule
 all: $(EXEC)
