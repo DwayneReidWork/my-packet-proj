@@ -1,0 +1,51 @@
+from enum import IntEnum, auto
+import struct
+
+class PacketType(IntEnum):
+    PING = 0
+    STRING = auto()
+    STRING_REPLY = auto()
+    MUL = auto()
+
+class Packet:
+    def __init__(self, p_type: PacketType):
+        self._p_type = p_type
+
+    @property
+    def packet_type(self):
+        return self._p_type
+
+    def pack(self) -> bytes:
+        # Format: Network(Big-endian + Single Byte)
+        return struct.pack('!B', self.packet_type)
+
+class Ping(Packet):
+    def __init__(self):
+        super().__init__(PacketType.PING)
+
+class Math(Packet):
+    def __init__(self, num: int):
+        super().__init__(PacketType.MUL)
+        self.num = num
+
+    def pack(self):
+        # Format: Network(Big-endian + Single Byte:signed in (pos/neg))
+        return super().pack() + struct.pack('!i', self.num)
+
+class String(Packet):
+    def __init__(self, str: str):
+        super().__init__(PacketType.STRING)
+        self.str = str        
+
+    def pack(self) -> bytes:
+         # Format: Network(!B from super.pack + unsigned int (only pos [no neg lenstring]))
+        return super().pack() + struct.pack('!I', len(self.str)) + self.str.encode()
+
+class String_Reply(Packet):
+    def __init__(self, reply: str):
+        super().__init__(PacketType.STRING_REPLY)
+        self.reply = reply
+    
+    def pack(self):
+        # Pack length of the reply (4 bytes) followed by the reply string
+        return super().pack() + struct.pack('!I', len(self.reply)) + self.reply.encode()
