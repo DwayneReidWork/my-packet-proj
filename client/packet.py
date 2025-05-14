@@ -4,8 +4,9 @@ import struct
 class PacketType(IntEnum):
     PING = 0
     STRING = auto()
-    STRING_REPLY = auto()
     MUL = auto()
+    UPLOAD = auto()
+
 
 class Packet:
     def __init__(self, p_type: PacketType):
@@ -23,7 +24,7 @@ class Ping(Packet):
     def __init__(self):
         super().__init__(PacketType.PING)
 
-class Math(Packet):
+class Multiply(Packet):
     def __init__(self, num: int):
         super().__init__(PacketType.MUL)
         self.num = num
@@ -40,12 +41,12 @@ class String(Packet):
     def pack(self) -> bytes:
          # Format: Network(!B from super.pack + unsigned int (only pos [no neg lenstring]))
         return super().pack() + struct.pack('!I', len(self.str)) + self.str.encode()
-
-class String_Reply(Packet):
-    def __init__(self, reply: str):
-        super().__init__(PacketType.STRING_REPLY)
-        self.reply = reply
     
-    def pack(self):
-        # Pack length of the reply (4 bytes) followed by the reply string
-        return super().pack() + struct.pack('!I', len(self.reply)) + self.reply.encode()
+class Upload(Packet):
+    def __init__(self, data: str):
+        super().__init__(PacketType.UPLOAD)
+        self.data = data        
+
+    def pack(self) -> bytes:
+         # Format: Network(!B from super.pack + unsigned int (only pos [no neg lenstring]))
+        return super().pack() + struct.pack('!I', len(self.data)) + self.data.encode()

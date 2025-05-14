@@ -9,6 +9,48 @@
 #define BUFFER_SIZE 1024
 #define MAX_CONNECTIONS 5
 
-void server_setup();
+typedef enum __attribute__((__packed__))
+{
+    PING,
+    STRING,
+    STRING_REPLY,
+    MUL,
+    UPLOAD,
+} PacketType;
+
+// Packet Type (Header for All)
+typedef struct __attribute__((__packed__))
+{
+    // msg_tpe is specific type of PacketType
+    PacketType msg_type;
+} p_header_t;
+
+// String Packets
+typedef struct __attribute__((__packed__))
+{
+    p_header_t header;
+    uint32_t data_len;
+    uint8_t *data;
+} p_string_t;
+
+// Mul Packet Format
+typedef struct __attribute__((__packed__))
+{
+    p_header_t header;
+    uint32_t data_len;
+    uint32_t data;
+} p_mul_t;
+
+// Upload Packet Format
+typedef struct __attribute__((__packed__))
+{
+    p_header_t header;
+    uint32_t data_len;
+    uint8_t *data;
+} p_upload_t;
+
+int server_setup();
+int handle_client(int client_sock);
+int check_packet_type(int client_sock);
 
 #endif

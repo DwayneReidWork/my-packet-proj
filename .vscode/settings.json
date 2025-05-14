@@ -2,6 +2,9 @@
     "files.associations": {
         "*.py": "python",
         "main.h": "c",
-        "server.h": "c"
+        "server.h": "c",
+        "socket.h": "c",
+        "inet.h": "c",
+        "stdlib.h": "c"
     }
 }

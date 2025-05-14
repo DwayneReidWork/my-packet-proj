@@ -1,9 +1,10 @@
-CC = gcc
+CC = gcc --std gnu99
+
 CFLAGS = -Wall -g
 
 # Source and header files
-SRCS = server/src/main.c server/src/server.c
-HDRS = server/inc/server.h
+SRCS = server/src/main.c server/src/netcomm.c server/src/server.c
+HDRS = server/inc/netcomm.h server/inc/server.h
 
 # Object files
 OBJS = $(SRCS:.c=.o)
@@ -15,12 +16,8 @@ EXEC = bin/my_server
 all: $(EXEC)
 
 # Link object files to create executable
-$(EXEC): $(OBJS)
+$(EXEC): $(SRCS) $(HDRS)
 	$(CC) $(CFLAGS) -o $@ $^
-
-# Compile .c files to .o
-%.o: %.c $(HDRS)
-	$(CC) $(CFLAGS) -c $< -o $@
 
 # Clean rule
 clean:

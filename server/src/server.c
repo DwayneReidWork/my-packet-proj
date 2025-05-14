@@ -1,30 +1,36 @@
+#include <arpa/inet.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
 #include <unistd.h>
-#include <arpa/inet.h>
+
+#include "../inc/netcomm.h"
+#include "../inc/server.h"
 
 #define PORT 1234
 #define BUFFER 1024
 
-#include "../inc/server.h"
-
-void server_setup()
+int server_setup()
 {
     int server_fd, new_socket;
     struct sockaddr_in address;
     int opt = 1;
+    int status = 0;
     int addrlen = sizeof(address);
 
-    if (0 == (server_fd = socket(AF_INET, SOCK_STREAM, 0)))
+    if (-1 == (server_fd = socket(AF_INET, SOCK_STREAM, 0)))
     {
         perror("Socket Failure");
-        exit(EXIT_FAILURE);
+        return -1;
     }
 
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)))
     {
         perror("setsockopt");
-        exit(EXIT_FAILURE);
+        close(server_fd);
+        return -1;
     }
 
     address.sin_family = AF_INET;
@@ -34,13 +40,15 @@ void server_setup()
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
     {
         perror("bind failed");
-        exit(EXIT_FAILURE);
+        close(server_fd);
+        return -1;
     }
 
     if (listen(server_fd, 3) < 0)
     {
         perror("listen failed");
-        exit(EXIT_FAILURE);
+        close(server_fd);
+        return -1;
     }
 
     printf("Listening on port %d\n", PORT);
@@ -48,6 +56,88 @@ void server_setup()
     if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
     {
         perror("accept failed");
-        exit(EXIT_FAILURE);
+        close(server_fd);
+        return -1;
     }
+    char host_buff[NI_MAXHOST];
+    char port_buff[NI_MAXSERV];
+
+    if (0 != (status = getnameinfo((struct sockaddr *)&(address), addrlen, host_buff, NI_MAXHOST, port_buff, NI_MAXSERV, NI_NUMERICSERV)))
+    {
+        fprintf(stderr, "Failed to get name information for client (%d: %s)", status, gai_strerror(status));
+        return -1;
+    }
+
+    printf("Connection Recieved from %s:%s\n", host_buff, port_buff);
+
+    while (1)
+    {
+        handle_client(new_socket);
+    }
+}
+
+int handle_client(int client_sock)
+{
+
+    if (check_packet_type(client_sock) == PING)
+    {
+        printf("Ping Recieved\n");
+    }
+
+    // SUCCESSFULLY SENDS NON SERIALIZED RESPONSE
+    // ssize_t bytes_sent = send_all(client_sock, ping_reply, strlen(ping_reply));
+    // if (bytes_sent < 0)
+    // {
+    //     perror("Send failed\n");
+    //     return -1;
+    // }
+
+    const char *reply_msg = "Got your Ping!";
+    size_t msg_len = strlen(reply_msg) + 1; // +1 for null terminator
+
+    // create packet
+    p_string_t ping_reply;
+    ping_reply.header.msg_type = STRING_REPLY;
+    ping_reply.data_len = msg_len;
+
+    // Allocate buffer
+    size_t total_size = sizeof(ping_reply.header) + sizeof(ping_reply.data_len) + msg_len;
+    char *send_buffer = (char *)malloc(total_size);
+    if (NULL == send_buffer)
+    {
+        perror("Memory allocation failed");
+        return -1;
+    }
+
+    // put the data in the buffer to send
+    memcpy(send_buffer, &ping_reply.header, sizeof(ping_reply.header));
+    memcpy(send_buffer + sizeof(ping_reply.header), &ping_reply.data_len, sizeof(ping_reply.data_len));
+    memcpy(send_buffer + sizeof(ping_reply.header) + sizeof(ping_reply.data_len), reply_msg, msg_len);
+
+    ssize_t bytes_sent = send_all(client_sock, send_buffer, total_size);
+    if (0 > bytes_sent)
+    {
+        perror("Send failed");
+        free(send_buffer);
+        return -1;
+    }
+
+    printf("PING response sent\n");
+    free(send_buffer);
+    return 0;
+}
+
+int check_packet_type(int client_sock)
+{
+    PacketType packet_type;
+
+    ssize_t bytes = recv(client_sock, &packet_type, sizeof(PacketType), 0);
+
+    if (0 > bytes)
+    {
+        perror("Recieve Failed\n");
+        return -1;
+    }
+    printf("Packet Type: %d\n", packet_type);
+    return packet_type;
 }
