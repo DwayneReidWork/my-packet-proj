@@ -2,7 +2,7 @@ from enum import IntEnum, auto
 import struct
 
 class PacketType(IntEnum):
-    PING = 0
+    PING = 1
     STRING = auto()
     MUL = auto()
     UPLOAD = auto()
