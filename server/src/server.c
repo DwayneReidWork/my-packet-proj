@@ -13,12 +13,13 @@
 
 #define PORT 1234
 #define BUFFER 1024
+#define BASE_PATH "server/for_uploads/"
 
 volatile sig_atomic_t keep_running = 1;
 
 int server_setup()
 {
-    signal(SIGINT, int_handler);
+    signal(SIGINT, ctrlc_handler);
 
     int server_fd, new_socket;
     struct sockaddr_in address;
@@ -105,6 +106,8 @@ int handle_client(int client_sock)
         handle_multiplication(client_sock);
         break;
     case UPLOAD:
+        printf("Upload Packet Received.\n");
+        handle_upload(client_sock);
         break;
     default:
         printf("Invalid Packet Type Received\n");
@@ -125,7 +128,8 @@ int check_packet_type(int client_sock)
         perror("Recieve Failed\n");
         return -1;
     }
-    if (bytes == 0)
+    // ctrl+d handler?
+    if (0 == bytes)
     {
         printf("Client disconnected.\n");
         return -1;
@@ -137,7 +141,7 @@ int check_packet_type(int client_sock)
 int handle_ping(int client_sock)
 {
     const char *reply_msg = "Got your Ping!";
-    size_t msg_len = strlen(reply_msg) + 1; // +1 for null terminator
+    size_t msg_len = strlen(reply_msg) + 1;
 
     // create packet
     p_string_t ping_reply;
@@ -176,7 +180,7 @@ int handle_multiplication(int client_sock)
     p_mul_t mul_packet = {.header.msg_type = MUL};
 
     char *recvd_data = recv_expected(client_sock, sizeof(uint32_t));
-    if (recvd_data == NULL)
+    if (NULL == recvd_data)
     {
         perror("Receive Failed");
         return -1;
@@ -219,7 +223,83 @@ int handle_multiplication(int client_sock)
     return 0;
 }
 
-void int_handler(int dummy)
+int handle_upload(int client_sock)
+{
+    // Receive data info
+    printf("Inside handle upload function\n");
+    char *recvd_data_len = recv_expected(client_sock, sizeof(uint32_t));
+    if (NULL == recvd_data_len)
+    {
+        perror("Receive Failed");
+        return -1;
+    }
+
+    uint32_t net_file_size;
+    memcpy(&net_file_size, recvd_data_len, sizeof(uint32_t));
+    free(recvd_data_len);
+
+    uint32_t file_size = ntohl(net_file_size);
+    // printf("Expected file size: %u bytes\n", file_size);
+    char *file_contents = recv_expected(client_sock, file_size);
+    file_contents[file_size] = '\0';
+
+    // Parse and write data
+    const char *delimiter = "|";
+    char *filename = strtok(file_contents, delimiter);
+    char *content = strtok(NULL, "");
+
+    // printf("Filename: %s\nFile Contents: %s\n", filename, content);
+
+    if (NULL != filename && NULL != content)
+    {
+        FILE *fp;
+        char full_path[BUFFER];
+        snprintf(full_path, sizeof(full_path), "%s%s", BASE_PATH, filename);
+        fp = fopen(full_path, "w");
+        if (NULL == fp)
+        {
+            perror("Error opening file");
+            return 1;
+        }
+        fprintf(fp, "%s", content);
+        if (fclose(fp) == EOF)
+        {
+            perror("Error closing file");
+            return 1;
+        }
+        printf("Write Successful\n");
+
+        // EVERYTHING ABOVE WORKS
+        //  Send reply
+        p_upload_t upload_packet = {.header.msg_type = UPLOAD};
+        size_t total_size = sizeof(upload_packet.header) + sizeof(upload_packet.data_len) + sizeof(uint32_t);
+        char *send_buffer = malloc(total_size);
+        if (!send_buffer)
+        {
+            perror("Malloc failed");
+            return -1;
+        }
+
+        memcpy(send_buffer, &upload_packet.header, sizeof(upload_packet.header));
+        memcpy(send_buffer + sizeof(upload_packet.header), &upload_packet.data_len, sizeof(upload_packet.data_len));
+        memcpy(send_buffer + sizeof(upload_packet.header) + sizeof(upload_packet.data_len), &content, sizeof(uint32_t));
+
+        ssize_t bytes_sent = send_all(client_sock, send_buffer, total_size);
+        if (bytes_sent < 0)
+        {
+            perror("Send failed");
+            free(send_buffer);
+            return -1;
+        }
+    }
+    else
+    {
+        fprintf(stderr, "Invalid upload format received.\n");
+    }
+    return 0;
+}
+
+void ctrlc_handler(int dummy)
 {
     keep_running = 0;
 }

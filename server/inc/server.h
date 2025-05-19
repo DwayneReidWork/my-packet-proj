@@ -49,7 +49,8 @@ typedef struct __attribute__((__packed__))
 } p_upload_t;
 
 int server_setup();
-void int_handler(int dummy);
+void ctrlc_handler(int dummy);
+int handle_upload(int client_sock);
 int handle_client(int client_sock);
 int handle_ping(int client_sock);
 int handle_multiplication(int client_sock);

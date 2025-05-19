@@ -59,6 +59,41 @@ class CmdController(cmd2.Cmd):
         result = struct.unpack('!I', response_data)[0]
         print(f"Result of multiplication is {result}.") 
     
+    upload_parser = cmd2.Cmd2ArgumentParser()
+    upload_parser.add_argument('fileName', type=str, action='store', help='The File Whose contents to upload.')
+    @cmd2.with_argparser(upload_parser)
+    def do_upload(self, args):
+        #Read file & send data
+        if self.sock is None:
+            raise Exception('Not Connected.')
+        try:
+            with open (args.fileName, 'r') as file:
+                contents = file.read()
+                print(f"Contents Read:\n{contents}")               
+
+            seperator = '|'
+
+            full_contents = args.fileName + seperator + contents
+            upload_packet = Upload(full_contents).pack()
+            
+            send_all(self.sock, upload_packet)
+            print("Content Sent")
+            
+        except FileNotFoundError as e:
+            print(e)
+
+        #receive response
+        packet_type, expected_len = self._check_packet_type(self.sock)
+        
+        if(packet_type != PacketType.STRING):
+            print(f"Unexpected packet type: {packet_type}")
+            return
+        if(None == expected_len):
+            print(f'Invalid Length. {expected_len}')
+            return
+        expected_size = struct.calcsize('!I') 
+        response_data = recv_expected(self.sock, expected_size)
+        print(f'Response: {response_data}')
 
     def _check_packet_type(self, args):
         header_format = '<BI'

@@ -1,4 +1,6 @@
 *.o
 __pycache__
 /bin
+/for_uploads
 toss.c
+test.txt
