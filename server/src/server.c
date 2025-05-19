@@ -239,18 +239,19 @@ int handle_upload(int client_sock)
     free(recvd_data_len);
 
     uint32_t file_size = ntohl(net_file_size);
-    // printf("Expected file size: %u bytes\n", file_size);
     char *file_contents = recv_expected(client_sock, file_size);
-    file_contents[file_size] = '\0';
+    if (file_contents == NULL)
+    {
+        perror("Failed to receive file contents");
+        return -1;
+    }
 
     // Parse and write data
     const char *delimiter = "|";
     char *filename = strtok(file_contents, delimiter);
     char *content = strtok(NULL, "");
 
-    // printf("Filename: %s\nFile Contents: %s\n", filename, content);
-
-    if (NULL != filename && NULL != content)
+    if (filename && content)
     {
         FILE *fp;
         char full_path[BUFFER];
@@ -259,43 +260,56 @@ int handle_upload(int client_sock)
         if (NULL == fp)
         {
             perror("Error opening file");
-            return 1;
+            free(file_contents);
+            return -1;
         }
+        // write contents to file
+        printf("Content pre write: %s\n", content);
         fprintf(fp, "%s", content);
         if (fclose(fp) == EOF)
         {
             perror("Error closing file");
-            return 1;
+            free(file_contents);
+            return -1;
         }
         printf("Write Successful\n");
-
-        // EVERYTHING ABOVE WORKS
-        //  Send reply
-        p_upload_t upload_packet = {.header.msg_type = UPLOAD};
-        size_t total_size = sizeof(upload_packet.header) + sizeof(upload_packet.data_len) + sizeof(uint32_t);
-        char *send_buffer = malloc(total_size);
-        if (!send_buffer)
-        {
-            perror("Malloc failed");
-            return -1;
-        }
-
-        memcpy(send_buffer, &upload_packet.header, sizeof(upload_packet.header));
-        memcpy(send_buffer + sizeof(upload_packet.header), &upload_packet.data_len, sizeof(upload_packet.data_len));
-        memcpy(send_buffer + sizeof(upload_packet.header) + sizeof(upload_packet.data_len), &content, sizeof(uint32_t));
-
-        ssize_t bytes_sent = send_all(client_sock, send_buffer, total_size);
-        if (bytes_sent < 0)
-        {
-            perror("Send failed");
-            free(send_buffer);
-            return -1;
-        }
     }
     else
     {
         fprintf(stderr, "Invalid upload format received.\n");
+        free(file_contents);
+        return -1;
     }
+
+    // Send reply
+    p_upload_t upload_packet = {.header.msg_type = UPLOAD};
+    uint8_t *success_msg = (uint8_t *)"Upload Successful";
+    upload_packet.data = success_msg;
+    upload_packet.data_len = strlen((const char *)success_msg) + 1;
+
+    ssize_t total_size = sizeof(upload_packet.header) + sizeof(upload_packet.data_len) + upload_packet.data_len;
+    char *send_buffer = malloc(total_size);
+    if (!send_buffer)
+    {
+        perror("Malloc failed");
+        return -1;
+    }
+
+    // Populate the buffer with the packet data
+    memcpy(send_buffer, &upload_packet.header, sizeof(upload_packet.header));
+    memcpy(send_buffer + sizeof(upload_packet.header), &upload_packet.data_len, sizeof(upload_packet.data_len));
+    memcpy(send_buffer + sizeof(upload_packet.header) + sizeof(upload_packet.data_len), upload_packet.data, upload_packet.data_len);
+
+    ssize_t bytes_sent = send_all(client_sock, send_buffer, total_size);
+    if (0 > bytes_sent)
+    {
+        perror("Send failed");
+        free(send_buffer);
+        return -1;
+    }
+
+    printf("Upload Response Sent\n");
+    free(send_buffer);
     return 0;
 }
 

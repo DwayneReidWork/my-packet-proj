@@ -53,10 +53,9 @@ class CmdController(cmd2.Cmd):
         if(None == expected_len):
             print('Invalid Length.')
             return
-        expected_size = struct.calcsize('!I') 
-        response_data = recv_expected(self.sock, expected_size)
+        response_data = recv_expected(self.sock, expected_len)
             
-        result = struct.unpack('!I', response_data)[0]
+        result = struct.unpack('!i', response_data)[0]
         print(f"Result of multiplication is {result}.") 
     
     upload_parser = cmd2.Cmd2ArgumentParser()
@@ -75,7 +74,7 @@ class CmdController(cmd2.Cmd):
 
             full_contents = args.fileName + seperator + contents
             upload_packet = Upload(full_contents).pack()
-            
+
             send_all(self.sock, upload_packet)
             print("Content Sent")
             
@@ -85,15 +84,14 @@ class CmdController(cmd2.Cmd):
         #receive response
         packet_type, expected_len = self._check_packet_type(self.sock)
         
-        if(packet_type != PacketType.STRING):
+        if(packet_type != PacketType.UPLOAD):
             print(f"Unexpected packet type: {packet_type}")
             return
         if(None == expected_len):
             print(f'Invalid Length. {expected_len}')
             return
-        expected_size = struct.calcsize('!I') 
-        response_data = recv_expected(self.sock, expected_size)
-        print(f'Response: {response_data}')
+        response_data = recv_expected(self.sock, expected_len)
+        print(f'Response: {response_data.decode()}')
 
     def _check_packet_type(self, args):
         header_format = '<BI'
