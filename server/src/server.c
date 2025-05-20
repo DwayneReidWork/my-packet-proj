@@ -214,7 +214,7 @@ int handle_multiplication(int client_sock)
     memcpy(send_buffer + sizeof(mul_packet.header) + sizeof(mul_packet.data_len), &result_net, sizeof(uint32_t));
 
     ssize_t bytes_sent = send_all(client_sock, send_buffer, total_size);
-    if (bytes_sent < 0)
+    if (0 > bytes_sent)
     {
         perror("Send failed");
         free(recvd_data);
@@ -245,7 +245,7 @@ int handle_upload(int client_sock)
     uint32_t file_size = ntohl(net_file_size);
     printf("File Size Post HTONL: %d\n", file_size);
     char *file_contents = recv_expected(client_sock, file_size);
-    if (file_contents == NULL)
+    if (NULL == file_contents)
     {
         perror("Failed to receive file contents");
         return -1;
@@ -275,7 +275,7 @@ int handle_upload(int client_sock)
 
         // Open file for writing (create file if it doesn't exist)
         fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC, 0644); // Open with write-only, create, and truncate flags
-        if (fd == -1)
+        if (-1 == fd)
         {
             perror("Error opening file");
             free(file_contents);
@@ -286,7 +286,7 @@ int handle_upload(int client_sock)
         ssize_t content_size = file_size - (content - file_contents);
         ssize_t bytes_written = write(fd, content, content_size);
 
-        if (bytes_written == -1)
+        if (-1 == bytes_written)
         {
             perror("Error writing to file");
             close(fd);
@@ -295,7 +295,7 @@ int handle_upload(int client_sock)
         }
 
         // Close the file descriptor after writing
-        if (close(fd) == -1)
+        if (-1 == close(fd))
         {
             perror("Error closing file");
             free(file_contents);
