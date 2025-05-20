@@ -43,11 +43,10 @@ class String(Packet):
         return super().pack() + struct.pack('!I', len(self.str)) + self.str.encode()
     
 class Upload(Packet):
-    def __init__(self, filename: str):
+    def __init__(self, data: str):
         super().__init__(PacketType.UPLOAD)
-        self.filename = filename      
+        self.data = data
 
     def pack(self) -> bytes:
-        encoded_filename = self.filename.encode('utf-8')
-        length = len(encoded_filename)          
-        return super().pack() + struct.pack('!I', length) + encoded_filename
+
+     return super().pack() + struct.pack('!I', len(self.data.encode())) + self.data.encode('utf-8')

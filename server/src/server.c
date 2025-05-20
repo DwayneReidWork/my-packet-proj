@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -121,7 +122,7 @@ int check_packet_type(int client_sock)
     PacketType packet_type;
 
     ssize_t bytes = recv(client_sock, &packet_type, sizeof(PacketType), 0);
-    printf("Recvd Packet Type Raw: %d\nBytes received: %ld\n", packet_type, bytes);
+    printf("Recvd Packet Type Raw: %d\n", packet_type);
 
     if (0 > bytes)
     {
@@ -225,7 +226,6 @@ int handle_multiplication(int client_sock)
 
 int handle_upload(int client_sock)
 {
-    // Receive data info
     printf("Inside handle upload function\n");
     char *recvd_data_len = recv_expected(client_sock, sizeof(uint32_t));
     if (NULL == recvd_data_len)
@@ -239,40 +239,67 @@ int handle_upload(int client_sock)
     free(recvd_data_len);
 
     uint32_t file_size = ntohl(net_file_size);
+    printf("File Size Post HTONL: %d\n", file_size);
     char *file_contents = recv_expected(client_sock, file_size);
     if (file_contents == NULL)
     {
         perror("Failed to receive file contents");
         return -1;
     }
+    printf("File Contents (Pre split):%s\n", file_contents);
 
-    // Parse and write data
-    const char *delimiter = "|";
-    char *filename = strtok(file_contents, delimiter);
-    char *content = strtok(NULL, "");
+    // Find the delimiter '|' to separate filename and content
+    char *delimiter_pos = strchr(file_contents, '|');
+    if (NULL == delimiter_pos)
+    {
+        fprintf(stderr, "Delimiter not found in upload data.\n");
+        free(file_contents);
+        return -1;
+    }
+
+    // Split into filename and content based on the delimiter
+    *delimiter_pos = '\0'; // Null-terminate the filename
+    char *filename = file_contents;
+    char *content = delimiter_pos + 1; // Content starts after the delimiter
 
     if (filename && content)
     {
-        FILE *fp;
+        // Construct the full file path
+        int fd;
         char full_path[BUFFER];
         snprintf(full_path, sizeof(full_path), "%s%s", BASE_PATH, filename);
-        fp = fopen(full_path, "w");
-        if (NULL == fp)
+
+        // Open file for writing (create file if it doesn't exist)
+        fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC, 0644); // Open with write-only, create, and truncate flags
+        if (fd == -1)
         {
             perror("Error opening file");
             free(file_contents);
             return -1;
         }
-        // write contents to file
-        printf("Content pre write: %s\n", content);
-        fprintf(fp, "%s", content);
-        if (fclose(fp) == EOF)
+
+        // Write contents to the file using write system call
+        ssize_t content_size = file_size - (content - file_contents);
+        ssize_t bytes_written = write(fd, content, content_size);
+
+        if (bytes_written == -1)
+        {
+            perror("Error writing to file");
+            close(fd);
+            free(file_contents);
+            return -1;
+        }
+
+        // Close the file descriptor after writing
+        if (close(fd) == -1)
         {
             perror("Error closing file");
             free(file_contents);
             return -1;
         }
+
         printf("Write Successful\n");
+        free(file_contents);
     }
     else
     {

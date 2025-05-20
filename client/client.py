@@ -66,20 +66,21 @@ class CmdController(cmd2.Cmd):
         if self.sock is None:
             raise Exception('Not Connected.')
         try:
-            with open (args.fileName, 'r') as file:
-                contents = file.read()
-                print(f"Contents Read:\n{contents}")               
+            with open (args.fileName, 'r', encoding='utf-8') as file:
+                contents = file.read()             
 
-            seperator = '|'
+            filename = args.fileName
+            full_contents = f"{filename}|{contents}"
+            print(f"Full Contents {full_contents}")
 
-            full_contents = args.fileName + seperator + contents
+            # Create the upload packet and send it
             upload_packet = Upload(full_contents).pack()
-
             send_all(self.sock, upload_packet)
             print("Content Sent")
-            
+                
         except FileNotFoundError as e:
             print(e)
+            return
 
         #receive response
         packet_type, expected_len = self._check_packet_type(self.sock)

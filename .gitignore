@@ -4,3 +4,4 @@ __pycache__
 /for_uploads
 toss.c
 test.txt
+*.txt
