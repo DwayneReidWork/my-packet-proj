@@ -20,7 +20,11 @@ volatile sig_atomic_t keep_running = 1;
 
 int server_setup()
 {
-    signal(SIGINT, ctrlc_handler);
+    struct sigaction sa;
+    sa.sa_handler = ctrlc_handler;
+    sa.sa_flags = 0;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, NULL);
 
     int server_fd, new_socket;
     struct sockaddr_in address;
