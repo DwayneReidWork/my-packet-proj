@@ -13,7 +13,7 @@ OBJS = $(SRCS:.c=.o)
 EXEC = bin/my_server
 
 # Default rule
-all: $(EXEC)
+all: clean $(EXEC)
 
 # Link object files to create executable
 $(EXEC): $(SRCS) $(HDRS)

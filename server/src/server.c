@@ -16,6 +16,12 @@
 #define BUFFER 1024
 #define BASE_PATH "server/for_uploads/"
 
+void ctrlc_handler(int dummy);
+int handle_upload(int client_sock, p_upload_t *upload_pack);
+int handle_client(int client_sock);
+int handle_ping(int client_sock);
+int handle_multiplication(int client_sock, p_mul_t *mulpack);
+int receive_packet(int client_sock, p_header_t *header, uint8_t **dest);
 volatile sig_atomic_t keep_running = 1;
 
 int server_setup()
@@ -82,13 +88,11 @@ int server_setup()
 
     printf("Connection Recieved from %s:%s\n", host_buff, port_buff);
 
-    while (keep_running)
+    if (handle_client(new_socket) < 0)
     {
-        if (handle_client(new_socket) < 0)
-        {
-            break;
-        }
+        perror("Error Handling Client");
     }
+
     printf("\nShutting down server...\n");
     close(new_socket);
     close(server_fd);
@@ -98,35 +102,77 @@ int server_setup()
 
 int handle_client(int client_sock)
 {
-    switch (check_packet_type(client_sock))
+    uint8_t *data = NULL;
+    p_header_t header;
+
+    while (keep_running)
     {
-    case PING:
-        printf("Ping Recieved\n");
-        handle_ping(client_sock);
-        break;
-    case STRING:
-        break;
-    case MUL:
-        printf("Multiplication Packet Received.\n");
-        handle_multiplication(client_sock);
-        break;
-    case UPLOAD:
-        printf("Upload Packet Received.\n");
-        handle_upload(client_sock);
-        break;
-    default:
-        printf("Invalid Packet Type Received\n");
-        break;
+        switch (receive_packet(client_sock, &header, &data))
+        {
+        case PING:
+            printf("Ping Recieved\n");
+            handle_ping(client_sock);
+            break;
+        case STRING:
+            break;
+        case MUL:
+            p_mul_t mul_pack;
+            if (header.p_len != sizeof(mul_pack.num))
+            {
+                perror("Size mismatch between header and mulpack.num");
+                free(data);
+                return -1;
+            }
+            memcpy(&mul_pack.header, &header, sizeof(header));
+            memcpy(&mul_pack.num, data, header.p_len);
+            printf("Multiplication Packet Received.\n");
+
+            if (0 != handle_multiplication(client_sock, &mul_pack))
+            {
+                perror("Eror in Handle Multiplication");
+                free(data);
+                return -1;
+            }
+            break;
+        case UPLOAD:
+            p_upload_t upload_pack = {.upload_data = data};
+            memcpy(&upload_pack.header, &header, sizeof(header));
+            printf("Upload Packet Received.\n");
+
+            if (0 != handle_upload(client_sock, &upload_pack))
+            {
+                perror("Error in Handle Upload");
+                free(data);
+                return -1;
+            }
+            break;
+        default:
+            printf("Invalid Packet Type Received\n");
+            break;
+        }
+        if (NULL != data)
+        {
+            free(data);
+        }
     }
     return 0;
 }
 
-int check_packet_type(int client_sock)
+int receive_packet(int client_sock, p_header_t *header, uint8_t **dest)
 {
-    PacketType packet_type;
+    if (NULL == header)
+    {
+        perror("Header Invalid");
+        return -1;
+    }
 
-    ssize_t bytes = recv(client_sock, &packet_type, sizeof(PacketType), 0);
-    printf("Recvd Packet Type Raw: %d\n", packet_type);
+    if (NULL == dest)
+    {
+        perror("Dest Invalid");
+        return -1;
+    }
+
+    ssize_t bytes = recv_expected(client_sock, sizeof(p_header_t), (uint8_t *)&header, sizeof(p_header_t));
 
     if (0 > bytes)
     {
@@ -140,7 +186,18 @@ int check_packet_type(int client_sock)
         return -1;
     }
 
-    return packet_type;
+    printf("Recvd Packet Type: %d\n", header->msg_type);
+    printf("Recvd Packet Len: %d\n", header->p_len);
+
+    *dest = recv_expected_alloc(client_sock, header->p_len);
+
+    if (NULL == *dest)
+    {
+        perror("Malloc Failed");
+        return -1;
+    }
+
+    return 0;
 }
 
 int handle_ping(int client_sock)
@@ -149,198 +206,118 @@ int handle_ping(int client_sock)
     size_t msg_len = strlen(reply_msg) + 1;
 
     // create packet
-    p_string_t ping_reply;
-    ping_reply.header.msg_type = STRING;
-    ping_reply.data_len = msg_len;
+    p_header_t ping_reply = {.msg_type = PING, .p_len = 0};
 
-    // Allocate buffer
-    size_t total_size = sizeof(ping_reply.header) + sizeof(ping_reply.data_len) + msg_len;
-    char *send_buffer = (char *)malloc(total_size);
-    if (NULL == send_buffer)
-    {
-        perror("Memory allocation failed");
-        return -1;
-    }
-
-    // put the data in the buffer to send
-    memcpy(send_buffer, &ping_reply.header, sizeof(ping_reply.header));
-    memcpy(send_buffer + sizeof(ping_reply.header), &ping_reply.data_len, sizeof(ping_reply.data_len));
-    memcpy(send_buffer + sizeof(ping_reply.header) + sizeof(ping_reply.data_len), reply_msg, msg_len);
-
-    ssize_t bytes_sent = send_all(client_sock, send_buffer, total_size);
+    ssize_t bytes_sent = send_all(client_sock, (uint8_t *)&ping_reply, sizeof(msg_len));
     if (0 > bytes_sent)
     {
         perror("Send failed");
-        free(send_buffer);
         return -1;
     }
 
     printf("PING Response Sent\n");
-    free(send_buffer);
     return 0;
 }
 
-int handle_multiplication(int client_sock)
+int handle_multiplication(int client_sock, p_mul_t *mulpack)
 {
-    p_mul_t mul_packet = {.header.msg_type = MUL};
+    // Convert number endianness multiply by 2 and reassign to mul.num
 
-    char *recvd_data = recv_expected(client_sock, sizeof(uint32_t));
-    if (NULL == recvd_data)
-    {
-        perror("Receive Failed");
-        return -1;
-    }
-
-    uint32_t num_recvd;
-    memcpy(&num_recvd, recvd_data, sizeof(uint32_t));
-    uint32_t num_in_correct_byte_order = ntohl(num_recvd);
-    uint32_t result = num_in_correct_byte_order * 2;
-    uint32_t result_net = htonl(result);
-
-    // Build the response buffer
-    mul_packet.data_len = sizeof(uint32_t);
-
-    size_t total_size = sizeof(mul_packet.header) + sizeof(mul_packet.data_len) + sizeof(uint32_t);
-    char *send_buffer = malloc(total_size);
-    if (!send_buffer)
-    {
-        perror("Malloc failed");
-        free(recvd_data);
-        return -1;
-    }
-
-    memcpy(send_buffer, &mul_packet.header, sizeof(mul_packet.header));
-    memcpy(send_buffer + sizeof(mul_packet.header), &mul_packet.data_len, sizeof(mul_packet.data_len));
-    memcpy(send_buffer + sizeof(mul_packet.header) + sizeof(mul_packet.data_len), &result_net, sizeof(uint32_t));
-
-    ssize_t bytes_sent = send_all(client_sock, send_buffer, total_size);
+    mulpack->num = htonl(ntohl(mulpack->num) * 2);
+    ssize_t bytes_sent = send_all(client_sock, (uint8_t *)&mulpack->num, sizeof(p_mul_t));
     if (0 > bytes_sent)
     {
         perror("Send failed");
-        free(recvd_data);
-        free(send_buffer);
         return -1;
     }
-
-    printf("Multiplication Response Sent\n");
-    free(recvd_data);
-    free(send_buffer);
     return 0;
 }
 
-int handle_upload(int client_sock)
+int handle_upload(int client_sock, p_upload_t *upload_pack)
 {
     printf("Inside handle upload function\n");
-    char *recvd_data_len = recv_expected(client_sock, sizeof(uint32_t));
-    if (NULL == recvd_data_len)
-    {
-        perror("Receive Failed");
-        return -1;
-    }
-
-    uint32_t net_file_size;
-    memcpy(&net_file_size, recvd_data_len, sizeof(uint32_t));
-    free(recvd_data_len);
-
-    uint32_t file_size = ntohl(net_file_size);
-    printf("File Size Post HTONL: %d\n", file_size);
-    char *file_contents = recv_expected(client_sock, file_size);
-    if (NULL == file_contents)
-    {
-        perror("Failed to receive file contents");
-        return -1;
-    }
-    printf("File Contents (Pre split):%s\n", file_contents);
 
     // Find the delimiter '|' to separate filename and content
-    char *delimiter_pos = strchr(file_contents, '|');
+    char *filename = (char *)upload_pack->upload_data;
+    char *delimiter_pos = strchr(filename, '|');
+
     if (NULL == delimiter_pos)
     {
         fprintf(stderr, "Delimiter not found in upload data.\n");
-        free(file_contents);
         return -1;
     }
 
     // Split into filename and content based on the delimiter
-    *delimiter_pos = '\0'; // Null-terminate the filename
-    char *filename = file_contents;
+    *delimiter_pos = '\0';             // Null-terminate the filename
     char *content = delimiter_pos + 1; // Content starts after the delimiter
-
-    if (filename && content)
+    ssize_t content_size = upload_pack->header.p_len - (content - filename);
+    if (0 == content_size)
     {
-        // Construct the full file path
-        int fd;
-        char full_path[BUFFER];
-        snprintf(full_path, sizeof(full_path), "%s%s", BASE_PATH, filename);
+        perror("No content found.");
+        return -1;
+    }
+    if (0 == strlen(filename))
+    {
+        perror("Filename Not Found.");
+        return -1;
+    }
 
-        // Open file for writing (create file if it doesn't exist)
-        fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC, 0644); // Open with write-only, create, and truncate flags
-        if (-1 == fd)
-        {
-            perror("Error opening file");
-            free(file_contents);
-            return -1;
-        }
+    // Construct the full file path
+    int fd;
 
-        // Write contents to the file using write system call
-        ssize_t content_size = file_size - (content - file_contents);
-        ssize_t bytes_written = write(fd, content, content_size);
+    char full_path[BUFFER];
+    snprintf(full_path, sizeof(full_path), "%s%s", BASE_PATH, filename);
 
+    // Open file for writing (create file if it doesn't exist)
+    fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC, 0644); // Open with write-only, create, and truncate flags
+    if (-1 == fd)
+    {
+        perror("Error opening file");
+        // Consider adding an error packet to send back in case of errors.
+        return -1;
+    }
+
+    // Write contents to the file using write system call
+    ssize_t bytes_written = 0;
+    while (bytes_written < content_size)
+    {
+        bytes_written = write(fd, content, content_size);
         if (-1 == bytes_written)
         {
             perror("Error writing to file");
             close(fd);
-            free(file_contents);
             return -1;
         }
-
-        // Close the file descriptor after writing
-        if (-1 == close(fd))
-        {
-            perror("Error closing file");
-            free(file_contents);
-            return -1;
-        }
-
-        printf("Write Successful\n");
-        free(file_contents);
     }
-    else
+
+    // Close the file descriptor after writing
+    if (-1 == close(fd))
     {
-        fprintf(stderr, "Invalid upload format received.\n");
-        free(file_contents);
+        perror("Error closing file");
         return -1;
     }
+
+    printf("Write Successful\n");
 
     // Send reply
-    p_upload_t upload_packet = {.header.msg_type = UPLOAD};
     uint8_t *success_msg = (uint8_t *)"Upload Successful";
-    upload_packet.data = success_msg;
-    upload_packet.data_len = strlen((const char *)success_msg) + 1;
+    p_header_t upload_reply = {.msg_type = UPLOAD, .p_len = strlen((const char *)success_msg) + 1};
 
-    ssize_t total_size = sizeof(upload_packet.header) + sizeof(upload_packet.data_len) + upload_packet.data_len;
-    char *send_buffer = malloc(total_size);
-    if (!send_buffer)
-    {
-        perror("Malloc failed");
-        return -1;
-    }
-
-    // Populate the buffer with the packet data
-    memcpy(send_buffer, &upload_packet.header, sizeof(upload_packet.header));
-    memcpy(send_buffer + sizeof(upload_packet.header), &upload_packet.data_len, sizeof(upload_packet.data_len));
-    memcpy(send_buffer + sizeof(upload_packet.header) + sizeof(upload_packet.data_len), upload_packet.data, upload_packet.data_len);
-
-    ssize_t bytes_sent = send_all(client_sock, send_buffer, total_size);
+    ssize_t bytes_sent = send_all(client_sock, success_msg, sizeof(upload_reply));
     if (0 > bytes_sent)
     {
         perror("Send failed");
-        free(send_buffer);
+        return -1;
+    }
+
+    ssize_t upload_reply_sent = send_all(client_sock, success_msg, upload_reply.p_len);
+    if (0 > upload_reply_sent)
+    {
+        perror("Send failed");
         return -1;
     }
 
     printf("Upload Response Sent\n");
-    free(send_buffer);
     return 0;
 }
 

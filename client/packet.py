@@ -20,6 +20,9 @@ class Packet:
         # Format: Network(Big-endian + Single Byte)
         return struct.pack('!B', self.packet_type)
 
+    def packet_size(self) -> int:
+        return 0 # for no header size inclusion
+
 class Ping(Packet):
     def __init__(self):
         super().__init__(PacketType.PING)
@@ -32,15 +35,9 @@ class Multiply(Packet):
     def pack(self):
         # Format: Network(Big-endian + Single Byte:signed in (pos/neg))
         return super().pack() + struct.pack('!i', self.num)
-
-class String(Packet):
-    def __init__(self, str: str):
-        super().__init__(PacketType.STRING)
-        self.str = str        
-
-    def pack(self) -> bytes:
-         # Format: Network(!B from super.pack + unsigned int (only pos [no neg lenstring]))
-        return super().pack() + struct.pack('!I', len(self.str)) + self.str.encode()
+    
+    def packet_size(self):
+        return super().packet_size() + struct.calcsize('!i')
     
 class Upload(Packet):
     def __init__(self, data: str):
@@ -48,5 +45,7 @@ class Upload(Packet):
         self.data = data
 
     def pack(self) -> bytes:
-
-     return super().pack() + struct.pack('!I', len(self.data.encode())) + self.data.encode('utf-8')
+        return super().pack() + struct.pack('!I', len(self.data.encode())) + self.data.encode('utf-8')
+    
+    def packet_size(self) -> int:
+        return super().packet_size() + struct.calcsize('!I', len(self.data)) + len(self.data)
