@@ -26,13 +26,21 @@ class CmdController(cmd2.Cmd):
     def do_ping(self, args):
         if self.sock is None:
             raise Exception('Not Connected.')
+
+        # Send ping
         send_all(self.sock, Ping().pack())
 
+        # Read response header
         packet_type, expected_len = self._check_packet_type(self.sock)
-        
-        if(packet_type == PacketType.STRING):
-            response = self.sock.recv(expected_len).decode()
-            print(f'Response: {response}')
+
+        if packet_type == PacketType.PING:
+            if expected_len != 0:
+                print(f"Warning: expected 0-length ping response, got {expected_len}")
+                _ = recv_expected(self.sock, expected_len)  # Drain extra if sent
+            print('Ping Successful!')
+        else:
+            print(f"Unexpected packet type: {packet_type}")
+
 
     mul_parser = cmd2.Cmd2ArgumentParser()
     mul_parser.add_argument('num', type=int, action='store', help='The number to be multiplied')

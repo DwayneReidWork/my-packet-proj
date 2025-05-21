@@ -40,7 +40,7 @@ int recv_expected(int sock, size_t expected_len, uint8_t *dest, size_t dest_size
         }
         recvd_len += received;
     }
-    return 0;
+    return recvd_len;
 }
 
 uint8_t *recv_expected_alloc(int sock, size_t expected_len)

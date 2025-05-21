@@ -197,18 +197,17 @@ int receive_packet(int client_sock, p_header_t *header, uint8_t **dest)
         return -1;
     }
 
-    return 0;
+    return header->msg_type;
 }
 
 int handle_ping(int client_sock)
 {
-    const char *reply_msg = "Got your Ping!";
-    size_t msg_len = strlen(reply_msg) + 1;
+    printf("Inside Ping\n");
 
     // create packet
     p_header_t ping_reply = {.msg_type = PING, .p_len = 0};
 
-    ssize_t bytes_sent = send_all(client_sock, (uint8_t *)&ping_reply, sizeof(msg_len));
+    ssize_t bytes_sent = send_all(client_sock, (const uint8_t *)&ping_reply, sizeof(ping_reply));
     if (0 > bytes_sent)
     {
         perror("Send failed");
