@@ -46,7 +46,7 @@ class Upload(Packet):
         super().__init__(PacketType.UPLOAD, len(self.data.encode()))
 
     def pack(self) -> bytes:
-        return super().pack() + struct.pack('!I', len(self.data.encode())) + self.data.encode('utf-8')
+        return super().pack() + self.data.encode('utf-8')
     
     def packet_size(self) -> int:
         return super().packet_size() + struct.calcsize('!I', len(self.data)) + len(self.data)

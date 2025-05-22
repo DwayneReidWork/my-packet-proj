@@ -101,11 +101,16 @@ class CmdController(cmd2.Cmd):
         if(None == expected_len):
             print(f'Invalid Length. {expected_len}')
             return
+        
         response_data = recv_expected(self.sock, expected_len)
-        print(f'Response: {response_data.decode()}')
+
+        if response_data:
+            print(f'Response: {response_data.decode()}')
+        else:
+            print("Error: Failed to receive valid response data.")
 
     def _check_packet_type(self, args):
-        header_format = '<BI'
+        header_format = '!BI'
         header_size = struct.calcsize(header_format)
         packet_header =  recv_expected(self.sock, header_size)
         if len(packet_header) != header_size:

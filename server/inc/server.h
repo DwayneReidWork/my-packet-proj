@@ -36,7 +36,7 @@ typedef struct __attribute__((__packed__))
 typedef struct __attribute__((__packed__))
 {
     p_header_t header;
-    uint8_t *upload_data;
+    uint8_t upload_data[];
 } p_upload_t;
 
 int server_setup();
