@@ -3,6 +3,8 @@ import socket
 import struct
 from .netcomm import send_all, recv_expected
 from .packet import PacketType, Multiply, Ping, Upload
+# from netcomm import send_all, recv_expected
+# from packet import PacketType, Multiply, Ping, Upload
 
 
 class Client():

@@ -50,7 +50,7 @@ uint8_t *recv_expected_alloc(int sock, size_t expected_len)
     {
         return NULL; // Memory allocation failed
     }
-    if (0 != recv_expected(sock, expected_len, recvd_bytes, expected_len))
+    if (1 == recv_expected(sock, expected_len, recvd_bytes, expected_len))
     {
         perror("error in recv expected");
         free(recvd_bytes);

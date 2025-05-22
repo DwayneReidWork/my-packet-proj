@@ -116,16 +116,16 @@ int handle_client(int client_sock)
         case STRING:
             break;
         case MUL:
+            printf("Multiplication Request Recieved\n");
             p_mul_t mul_pack;
-            if (header.p_len != sizeof(mul_pack.num))
+            if (htonl(header.p_len) != sizeof(mul_pack.num))
             {
                 perror("Size mismatch between header and mulpack.num");
                 free(data);
                 return -1;
             }
             memcpy(&mul_pack.header, &header, sizeof(header));
-            memcpy(&mul_pack.num, data, header.p_len);
-            printf("Multiplication Packet Received.\n");
+            memcpy(&mul_pack.num, data, sizeof(mul_pack.num));
 
             if (0 != handle_multiplication(client_sock, &mul_pack))
             {
@@ -172,7 +172,7 @@ int receive_packet(int client_sock, p_header_t *header, uint8_t **dest)
         return -1;
     }
 
-    ssize_t bytes = recv_expected(client_sock, sizeof(p_header_t), (uint8_t *)&header, sizeof(p_header_t));
+    ssize_t bytes = recv_expected(client_sock, sizeof(p_header_t), (uint8_t *)header, sizeof(p_header_t));
 
     if (0 > bytes)
     {
@@ -187,9 +187,9 @@ int receive_packet(int client_sock, p_header_t *header, uint8_t **dest)
     }
 
     printf("Recvd Packet Type: %d\n", header->msg_type);
-    printf("Recvd Packet Len: %d\n", header->p_len);
+    printf("Recvd Packet Len: %d\n", htonl(header->p_len));
 
-    *dest = recv_expected_alloc(client_sock, header->p_len);
+    *dest = recv_expected_alloc(client_sock, htonl(header->p_len));
 
     if (NULL == *dest)
     {
@@ -222,8 +222,11 @@ int handle_multiplication(int client_sock, p_mul_t *mulpack)
 {
     // Convert number endianness multiply by 2 and reassign to mul.num
 
-    mulpack->num = htonl(ntohl(mulpack->num) * 2);
-    ssize_t bytes_sent = send_all(client_sock, (uint8_t *)&mulpack->num, sizeof(p_mul_t));
+    uint32_t result = htonl(ntohl(mulpack->num) * 2);
+
+    p_mul_t mul_response = {.header.msg_type = MUL, .num = result, .header.p_len = sizeof(mulpack->num)};
+
+    ssize_t bytes_sent = send_all(client_sock, (const uint8_t *)&mul_response, sizeof(p_mul_t));
     if (0 > bytes_sent)
     {
         perror("Send failed");
