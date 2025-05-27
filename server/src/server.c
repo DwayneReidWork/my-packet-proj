@@ -174,6 +174,7 @@ int handle_client(int client_sock)
 
 int receive_packet(int client_sock, p_header_t *header, uint8_t **dest)
 {
+    printf("Inside Packet Received.\n");
     if (NULL == header)
     {
         perror("Header Invalid");
@@ -188,6 +189,7 @@ int receive_packet(int client_sock, p_header_t *header, uint8_t **dest)
 
     ssize_t bytes = recv_expected(client_sock, sizeof(p_header_t), (uint8_t *)header, sizeof(p_header_t));
 
+    printf("Packet Received.\n");
     if (0 > bytes)
     {
         perror("Recieve Failed\n");
@@ -327,7 +329,7 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
     size_t msg_len = strlen(msg) + 1;
 
     p_upload_t *upload_reply = malloc(sizeof(p_upload_t) + msg_len);
-    if (!upload_reply)
+    if (NULL == upload_reply)
     {
         perror("Failed to allocate upload reply");
         return -1;

@@ -9,28 +9,33 @@ class PacketType(IntEnum):
 
 
 class Packet:
-    def __init__(self, p_type: PacketType, payload_len: int=0):
+    def __init__(self, p_type: PacketType):
         self._p_type = p_type
-        self._payload_len = payload_len
 
     @property
     def packet_type(self):
         return self._p_type
 
-    def pack(self) -> bytes:
-        # Format: Network(Big-endian + Single Byte)
-        return struct.pack('!BI', self.packet_type, self._payload_len)
-
     def packet_size(self) -> int:
         return 0 # for no header size inclusion
+    
+    def pack(self) -> bytes:
+        # Format: Network(Big-endian + Single Byte)
+        return struct.pack('!BI', self.packet_type, self.packet_size())
+
 
 class Ping(Packet):
     def __init__(self):
-        super().__init__(PacketType.PING, 0)
+        super().__init__(PacketType.PING)
+
+    def pack(self) -> bytes:
+        # Format: Network(Big-endian + Single Byte)
+        return super().pack() + struct.pack('!B', self.packet_type)
+    
 
 class Multiply(Packet):
     def __init__(self, num: int):
-        super().__init__(PacketType.MUL, 4)
+        super().__init__(PacketType.MUL)
         self.num = num
 
     def pack(self):
@@ -49,4 +54,4 @@ class Upload(Packet):
         return super().pack() + self.data.encode('utf-8')
     
     def packet_size(self) -> int:
-        return super().packet_size() + struct.calcsize('!I', len(self.data)) + len(self.data)
+        return super().packet_size() + len(self.data)
