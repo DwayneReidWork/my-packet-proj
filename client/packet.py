@@ -38,20 +38,22 @@ class Multiply(Packet):
         super().__init__(PacketType.MUL)
         self.num = num
 
+    def packet_size(self):
+        return struct.calcsize('!i')
+    
     def pack(self):
         # Format: Network(Big-endian + Single Byte:signed in (pos/neg))
-        return super().pack() + struct.pack('!i', self.num)
+        return super().pack() + struct.pack('!iI', self.num, self.packet_size())
     
-    def packet_size(self):
-        return super().packet_size() + struct.calcsize('!i')
     
 class Upload(Packet):
     def __init__(self, data: str):
         self.data = data
-        super().__init__(PacketType.UPLOAD, len(self.data.encode()))
+        super().__init__(PacketType.UPLOAD)
 
     def pack(self) -> bytes:
-        return super().pack() + self.data.encode('utf-8')
+        return super().pack() + self.data.encode('utf-8') + struct.pack('!I', self.packet_size())
     
     def packet_size(self) -> int:
-        return super().packet_size() + len(self.data)
+        data = self.data.encode()
+        return len(data)
