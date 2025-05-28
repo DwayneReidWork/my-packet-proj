@@ -30,7 +30,7 @@ class Ping(Packet):
 
     def pack(self) -> bytes:
         # Format: Network(Big-endian + Single Byte)
-        return super().pack() + struct.pack('!B', self.packet_type)
+        return super().pack()
     
 
 class Multiply(Packet):
@@ -43,7 +43,7 @@ class Multiply(Packet):
     
     def pack(self):
         # Format: Network(Big-endian + Single Byte:signed in (pos/neg))
-        return super().pack() + struct.pack('!iI', self.num, self.packet_size())
+        return super().pack() + struct.pack('!i', self.num)
     
     
 class Upload(Packet):
@@ -52,7 +52,7 @@ class Upload(Packet):
         super().__init__(PacketType.UPLOAD)
 
     def pack(self) -> bytes:
-        return super().pack() + self.data.encode('utf-8') + struct.pack('!I', self.packet_size())
+        return super().pack() + self.data.encode('utf-8')
     
     def packet_size(self) -> int:
         data = self.data.encode()

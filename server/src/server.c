@@ -110,13 +110,11 @@ int handle_client(int client_sock)
         switch (receive_packet(client_sock, &header, &data))
         {
         case PING:
-            printf("Ping Recieved\n");
             handle_ping(client_sock);
             break;
         case STRING:
             break;
         case MUL:
-            printf("Multiplication Request Recieved\n");
             p_mul_t mul_pack;
             if (ntohl(header.p_len) != sizeof(mul_pack.num))
             {
@@ -135,7 +133,7 @@ int handle_client(int client_sock)
             }
             break;
         case UPLOAD:
-            printf("Upload Packet Received.\n");
+            printf("Entered upload Case.\n");
 
             // Allocate a dynamic buffer to hold header + data
             uint32_t payload_len = ntohl(header.p_len);
@@ -218,7 +216,7 @@ int receive_packet(int client_sock, p_header_t *header, uint8_t **dest)
 
 int handle_ping(int client_sock)
 {
-    printf("Inside Ping\n");
+    printf("Inside Ping Function.\n");
 
     // create packet
     p_header_t ping_reply = {.msg_type = PING, .p_len = 0};
@@ -236,7 +234,10 @@ int handle_ping(int client_sock)
 
 int handle_multiplication(int client_sock, p_mul_t *mulpack)
 {
-    uint32_t result = ntohl(mulpack->num * 2);
+    printf("Inside handle multiplication function\n");
+    int32_t num_host = ntohl(mulpack->num);
+
+    int32_t result = num_host * 2;
 
     p_mul_t mul_response = {.header.msg_type = MUL,
                             .header.p_len = htonl(sizeof(mulpack->num)),
@@ -248,6 +249,7 @@ int handle_multiplication(int client_sock, p_mul_t *mulpack)
         perror("Send failed");
         return -1;
     }
+    printf("Multiplication Response Sent.\n");
     return 0;
 }
 
@@ -273,8 +275,6 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
     // Parse upload_data: "filename|filecontents"
     char *filename = (char *)upload_pkt->upload_data;
     char *delimiter_pos = strchr(filename, '|');
-
-    printf("Upload Data:\n%s\n", upload_pkt->upload_data);
 
     if (NULL == delimiter_pos)
     {
@@ -355,5 +355,6 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
 
 void ctrlc_handler(int dummy)
 {
+    printf("CTRL+C signal received.");
     keep_running = 0;
 }
