@@ -30,7 +30,6 @@ class CmdController(cmd2.Cmd):
             raise Exception('Not Connected.')
 
         # Send ping
-        print(' '.join([f'{byte:02x}' for byte in Ping().pack()]))
         send_all(self.sock, Ping().pack())
 
         # Read response header
@@ -86,7 +85,6 @@ class CmdController(cmd2.Cmd):
 
             # Create the upload packet and send it
             upload_packet = Upload(full_contents).pack()
-            print(' '.join([f'{byte:02x}' for byte in upload_packet]))
             send_all(self.sock, upload_packet)
             print("Content Sent")
                 

@@ -22,7 +22,7 @@ int handle_client(int client_sock);
 int handle_ping(int client_sock);
 int handle_multiplication(int client_sock, p_mul_t *mulpack);
 int receive_packet(int client_sock, p_header_t *header, uint8_t **dest);
-volatile sig_atomic_t keep_running = 1;
+volatile sig_atomic_t keep_running = 0;
 
 int server_setup()
 {
@@ -105,7 +105,7 @@ int handle_client(int client_sock)
     uint8_t *data = NULL;
     p_header_t header;
 
-    while (keep_running)
+    while (-1 != keep_running)
     {
         switch (receive_packet(client_sock, &header, &data))
         {
@@ -116,25 +116,25 @@ int handle_client(int client_sock)
             break;
         case MUL:
             p_mul_t mul_pack;
+
             if (ntohl(header.p_len) != sizeof(mul_pack.num))
             {
                 perror("Size mismatch between header and mulpack.num");
                 free(data);
                 return -1;
             }
+
             memcpy(&mul_pack.header, &header, sizeof(header));
             memcpy(&mul_pack.num, data, sizeof(mul_pack.num));
 
             if (0 != handle_multiplication(client_sock, &mul_pack))
             {
-                perror("Eror in Handle Multiplication");
+                perror("Error in Handle Multiplication");
                 free(data);
                 return -1;
             }
             break;
         case UPLOAD:
-            printf("Entered upload Case.\n");
-
             // Allocate a dynamic buffer to hold header + data
             uint32_t payload_len = ntohl(header.p_len);
             p_upload_t *upload_pack = malloc(sizeof(p_upload_t) + payload_len);
@@ -162,17 +162,13 @@ int handle_client(int client_sock)
             printf("Invalid Packet Type Received\n");
             break;
         }
-        if (NULL != data)
-        {
-            free(data);
-        }
     }
     return 0;
 }
 
 int receive_packet(int client_sock, p_header_t *header, uint8_t **dest)
 {
-    printf("Inside Packet Received.\n");
+    printf("Waiting for Packet.\n");
     if (NULL == header)
     {
         perror("Header Invalid");
@@ -190,13 +186,7 @@ int receive_packet(int client_sock, p_header_t *header, uint8_t **dest)
     printf("Packet Received.\n");
     if (0 > bytes)
     {
-        perror("Recieve Failed\n");
-        return -1;
-    }
-    // ctrl+d handler?
-    if (0 == bytes)
-    {
-        printf("Client disconnected.\n");
+        perror("Receive Failed\n");
         return -1;
     }
 
@@ -216,8 +206,6 @@ int receive_packet(int client_sock, p_header_t *header, uint8_t **dest)
 
 int handle_ping(int client_sock)
 {
-    printf("Inside Ping Function.\n");
-
     // create packet
     p_header_t ping_reply = {.msg_type = PING, .p_len = 0};
 
@@ -234,7 +222,6 @@ int handle_ping(int client_sock)
 
 int handle_multiplication(int client_sock, p_mul_t *mulpack)
 {
-    printf("Inside handle multiplication function\n");
     int32_t num_host = ntohl(mulpack->num);
 
     int32_t result = num_host * 2;
@@ -255,17 +242,16 @@ int handle_multiplication(int client_sock, p_mul_t *mulpack)
 
 int handle_upload(int client_sock, p_upload_t *upload_pack)
 {
-    printf("Inside handle upload function\n");
-
     p_header_t header = upload_pack->header;
     uint32_t payload_len = ntohl(header.p_len);
 
     p_upload_t *upload_pkt = malloc(sizeof(p_upload_t) + payload_len);
-    if (upload_pkt == NULL)
+    if (NULL == upload_pkt)
     {
         perror("Failed to allocate upload packet");
         return -1;
     }
+
     // fixed warning of uninitialized thingy
     memset(upload_pkt, 0, sizeof(p_upload_t) + payload_len);
 
@@ -311,7 +297,7 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
     while (bytes_written < content_size)
     {
         ssize_t written = write(fd, content + bytes_written, content_size - bytes_written);
-        if (written <= 0)
+        if (0 >= written)
         {
             perror("Error writing to file");
             close(fd);
@@ -355,6 +341,7 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
 
 void ctrlc_handler(int dummy)
 {
-    printf("CTRL+C signal received.");
-    keep_running = 0;
+    const char *error_message = "CTRL+C signal received.\n";
+    write(STDERR_FILENO, error_message, strlen(error_message));
+    keep_running = -1;
 }
