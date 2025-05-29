@@ -71,7 +71,7 @@ int server_setup()
 
     printf("Listening on port %d\n", PORT);
 
-    if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
+    if (0 > (new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)))
     {
         perror("accept failed");
         close(server_fd);
@@ -88,7 +88,7 @@ int server_setup()
 
     printf("Connection Recieved from %s:%s\n", host_buff, port_buff);
 
-    if (handle_client(new_socket) < 0)
+    if (0 > handle_client(new_socket))
     {
         perror("Error Handling Client");
     }
