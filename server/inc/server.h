@@ -15,6 +15,8 @@ typedef enum __attribute__((__packed__))
     STRING,
     MUL,
     UPLOAD,
+    LIST_FILES,
+    RUN_CMD,
 } PacketType;
 
 // Packet Type (Header for All)
@@ -38,6 +40,22 @@ typedef struct __attribute__((__packed__))
     p_header_t header;
     uint8_t upload_data[];
 } p_upload_t;
+
+// List File Packet Format (Should just use ping format)
+typedef struct __attribute__((__packed__))
+{
+    p_header_t header;
+    uint8_t file_name_count;
+    uint8_t *dirFileNameLen;
+    char **dirFileName;
+} p_list_files_t;
+
+// Run Cmd Packet Format
+typedef struct __attribute__((__packed__))
+{
+    p_header_t header;
+    uint8_t *command;
+} p_cmd_t;
 
 int server_setup();
 

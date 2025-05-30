@@ -6,6 +6,8 @@ class PacketType(IntEnum):
     STRING = auto()
     MUL = auto()
     UPLOAD = auto()
+    LIST_FILES = auto()
+    RUN_CMD = auto()
 
 
 class Packet:
@@ -50,6 +52,25 @@ class Upload(Packet):
     def __init__(self, data: str):
         self.data = data
         super().__init__(PacketType.UPLOAD)
+
+    def pack(self) -> bytes:
+        return super().pack() + self.data.encode('utf-8')
+    
+    def packet_size(self) -> int:
+        data = self.data.encode()
+        return len(data)
+    
+class List_Files(Packet):
+    def __init__(self):
+        super().__init__(PacketType.LIST_FILES)
+    
+    def pack(self) -> bytes:
+        return super().pack()
+
+class Run_Cmd(Packet):
+    def __init__(self, data: str):
+        self.data = data
+        super().__init__(PacketType.RUN_CMD)
 
     def pack(self) -> bytes:
         return super().pack() + self.data.encode('utf-8')

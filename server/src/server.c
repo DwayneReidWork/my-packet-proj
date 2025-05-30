@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <stdio.h>
@@ -13,15 +14,15 @@
 #include "../inc/server.h"
 
 #define PORT 1234
-#define BUFFER 1024
 #define BASE_PATH "server/for_uploads/"
 
-void ctrlc_handler(int dummy);
-int handle_upload(int client_sock, p_upload_t *upload_pack);
 int handle_client(int client_sock);
+int handle_list_files(int client_sock);
 int handle_ping(int client_sock);
 int handle_multiplication(int client_sock, p_mul_t *mulpack);
+int handle_upload(int client_sock, p_upload_t *upload_pack);
 int receive_packet(int client_sock, p_header_t *header, uint8_t **dest);
+void ctrlc_handler(int dummy);
 volatile sig_atomic_t keep_running = 0;
 
 int server_setup()
@@ -158,6 +159,13 @@ int handle_client(int client_sock)
 
             free(upload_pack);
             break;
+        case LIST_FILES:
+            printf("Received List File Packet.\n");
+            handle_list_files(client_sock);
+            break;
+        case RUN_CMD:
+            printf("Received Cmd to run.\n");
+            break;
         default:
             printf("Invalid Packet Type Received\n");
             break;
@@ -282,7 +290,7 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
         return -1;
     }
 
-    char full_path[BUFFER];
+    char full_path[BUFFER_SIZE];
     snprintf(full_path, sizeof(full_path), "%s%s", BASE_PATH, filename);
 
     int fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -339,9 +347,74 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
     return 0;
 }
 
+int handle_list_files(int client_sock)
+{
+    p_list_files_t *reply_file_list;
+    reply_file_list = malloc(sizeof(p_list_files_t));
+
+    if (NULL == reply_file_list)
+    {
+        perror("malloc failed");
+        return -1;
+    }
+    memset(reply_file_list, 0, sizeof(p_list_files_t));
+
+    struct dirent *ent;
+    reply_file_list->file_name_count = 0;
+    DIR *dir = opendir(BASE_PATH);
+
+    if (NULL == dir)
+    {
+        perror("Error opening directory");
+        free(reply_file_list);
+        return -1;
+    }
+
+    while (NULL != (ent = readdir(dir)))
+    {
+        if (ent->d_type == DT_REG)
+        {
+            // realloc makes space for the new pointer
+            reply_file_list->dirFileName = realloc(reply_file_list->dirFileName, reply_file_list->file_name_count * sizeof(char *) + 1);
+
+            // copy name into struct
+            char *temp = strdup(ent->d_name);
+
+            reply_file_list->dirFileName[reply_file_list->file_name_count] = strdup(ent->d_name);
+            // get name length assign to struct
+            reply_file_list->dirFileNameLen[reply_file_list->file_name_count] = strlen(temp);
+
+            // increment file name counter
+            reply_file_list->file_name_count++;
+        }
+    }
+    closedir(dir);
+
+    reply_file_list->header.msg_type = LIST_FILES;
+    // p_len = size of file names + number of file names
+    reply_file_list->header.p_len = htons(
+        sizeof(reply_file_list->dirFileName) +
+        sizeof(reply_file_list->dirFileNameLen));
+
+    printf("List Reply Header P_Len: %d\n", reply_file_list->header.p_len);
+
+    p_list_files_t *resized_reply_file_list;
+    resized_reply_file_list = realloc(reply_file_list, reply_file_list->header.p_len);
+
+    reply_file_list = resized_reply_file_list;
+
+    ssize_t total_size = sizeof(resized_reply_file_list) + htons(reply_file_list->header.p_len);
+    // ssize_t total_size = sizeof(p_header_t) + htonl(reply_file_list->header.p_len);
+    send_all(client_sock, (uint8_t *)reply_file_list, total_size);
+    free(reply_file_list);
+    printf("List Sent!\n");
+
+    return 0;
+}
+
 void ctrlc_handler(int dummy)
 {
-    const char *error_message = "CTRL+C signal received.\n";
+    const char *error_message = "\nCTRL+C signal received.\n";
     write(STDERR_FILENO, error_message, strlen(error_message));
     keep_running = -1;
 }

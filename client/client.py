@@ -2,9 +2,12 @@ import cmd2
 import socket
 import struct
 from .netcomm import send_all, recv_expected
-from .packet import PacketType, Multiply, Ping, Upload
+from .packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd
 # from netcomm import send_all, recv_expected
-# from packet import PacketType, Multiply, Ping, Upload
+# from packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd
+
+MAX_LIST_SIZE = 128
+MAX_FNAME_SIZE = 256
 
 
 class Client():
@@ -108,6 +111,51 @@ class CmdController(cmd2.Cmd):
             print(f'Response: {response_data.decode()}')
         else:
             print("Error: Failed to receive valid response data.")
+
+    def do_list_files(self, args):
+        #send
+        if self.sock is None:
+            raise Exception('Not Connected.')
+        send_all(self.sock, List_Files().pack())
+
+        #receive
+        packet_type, expected_len = self._check_packet_type(self.sock)
+        
+        if(packet_type != PacketType.LIST_FILES):
+            print(f"Unexpected packet type: {packet_type}")
+            return
+        if(None == expected_len):
+            print(f'Invalid Length. {expected_len}')
+            return
+        
+        '''Receive 1 byte for number of file names
+    For filename_i in range(that length):
+    receive 1 byte to know the file name length
+    receive that number of bytes for a file name'''
+        response_data = recv_expected(self.sock, expected_len)
+
+        hex_values_of_resp_data = [hex(byte) for byte in response_data]
+        print(' '.join(hex_values_of_resp_data))
+
+        if response_data:
+            print(f'Found Files:\n{response_data.decode()}')
+        else:
+            print("Error: Failed to receive valid response data.")
+
+    run_cmd_parser = cmd2.Cmd2ArgumentParser()
+    run_cmd_parser.add_argument('cmd', type=str, action='store', help='The command to run on the other side.')
+    @cmd2.with_argparser(run_cmd_parser)
+    def do_run_cmd(self, args):
+        if self.sock is None:
+            raise Exception('Not Connected.')
+        try:
+            cmd_packet = Run_Cmd(args.cmd).pack()
+            send_all(self.sock, cmd_packet)
+            print("Command Send.")
+
+        except Exception as e:
+            print(e)
+            return
 
     def _check_packet_type(self, args):
         header_format = '!BI'
