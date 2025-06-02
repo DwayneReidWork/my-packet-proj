@@ -1,10 +1,10 @@
 import cmd2
 import socket
 import struct
-from .netcomm import send_all, recv_expected
-from .packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd
-# from netcomm import send_all, recv_expected
-# from packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd
+# from .netcomm import send_all, recv_expected
+# from .packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd
+from netcomm import send_all, recv_expected
+from packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd
 
 MAX_LIST_SIZE = 128
 MAX_FNAME_SIZE = 256
@@ -134,11 +134,15 @@ class CmdController(cmd2.Cmd):
     receive that number of bytes for a file name'''
         response_data = recv_expected(self.sock, expected_len)
 
-        hex_values_of_resp_data = [hex(byte) for byte in response_data]
-        print(' '.join(hex_values_of_resp_data))
+        # hex_values_of_resp_data = [hex(byte) for byte in response_data]
+        # print(' '.join(hex_values_of_resp_data))
 
         if response_data:
-            print(f'Found Files:\n{response_data.decode()}')
+            filenames = parse_file_list(response_data)
+            print("Files:")
+            for f in filenames:
+                print(f" - {f}")
+            #print(f'Found Files:\n{response_data}')
         else:
             print("Error: Failed to receive valid response data.")
 
@@ -171,3 +175,15 @@ class CmdController(cmd2.Cmd):
             raise ValueError(f"Unknown packet type: {raw_type}")
 
         return packet_type, expected_len
+
+def parse_file_list(data: bytes):
+    count = data[0]
+    pos = 1
+    filenames = []
+    for _ in range(count):
+        name_len = data[pos]
+        pos += 1
+        name = data[pos:pos+name_len]
+        pos += name_len
+        filenames.append(name)
+    return filenames

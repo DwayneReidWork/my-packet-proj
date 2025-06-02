@@ -1,5 +1,5 @@
-from .client import CmdController
-#from client import CmdController
+#from .client import CmdController
+from client import CmdController
 import sys
 
 def main():

@@ -377,12 +377,17 @@ int handle_list_files(int client_sock)
             // realloc makes space for the new pointer
             reply_file_list->dirFileName = realloc(reply_file_list->dirFileName, reply_file_list->file_name_count * sizeof(char *) + 1);
 
+            reply_file_list->dirFileNameLen = realloc(reply_file_list->dirFileNameLen, reply_file_list->file_name_count * sizeof(uint8_t *));
+
             // copy name into struct
             char *temp = strdup(ent->d_name);
 
             reply_file_list->dirFileName[reply_file_list->file_name_count] = strdup(ent->d_name);
             // get name length assign to struct
             reply_file_list->dirFileNameLen[reply_file_list->file_name_count] = strlen(temp);
+
+            printf("File Name from Temp: %s\n", temp);
+            printf("Temp file sizes as looping through: %ld\n", strlen(temp));
 
             // increment file name counter
             reply_file_list->file_name_count++;
@@ -392,23 +397,40 @@ int handle_list_files(int client_sock)
 
     reply_file_list->header.msg_type = LIST_FILES;
     // p_len = size of file names + number of file names
-    reply_file_list->header.p_len = htons(
-        sizeof(reply_file_list->dirFileName) +
-        sizeof(reply_file_list->dirFileNameLen));
+    printf("FILE SIZE CALCULATION SHIT:\n");
+    printf("strlen/dirfilename: %ld\n", strlen(*reply_file_list->dirFileName));
+    printf("sizeof dirfilename: %ld\n", sizeof(*reply_file_list->dirFileName));
+    printf("sizeof dirfilenamelen: %ld\n", sizeof(reply_file_list->dirFileNameLen));
 
-    printf("List Reply Header P_Len: %d\n", reply_file_list->header.p_len);
+    reply_file_list->header.p_len = strlen(*reply_file_list->dirFileName) +
+                                    sizeof(reply_file_list->dirFileNameLen);
+
+    printf("Reply Header P_Len: %d\n", reply_file_list->header.p_len);
 
     p_list_files_t *resized_reply_file_list;
-    resized_reply_file_list = realloc(reply_file_list, reply_file_list->header.p_len);
+    ssize_t total_size = sizeof(resized_reply_file_list) + (reply_file_list->header.p_len);
 
+    resized_reply_file_list = realloc(reply_file_list, total_size);
     reply_file_list = resized_reply_file_list;
 
-    ssize_t total_size = sizeof(resized_reply_file_list) + htons(reply_file_list->header.p_len);
-    // ssize_t total_size = sizeof(p_header_t) + htonl(reply_file_list->header.p_len);
-    send_all(client_sock, (uint8_t *)reply_file_list, total_size);
+    // printf("Hex values: ");
+    // uint8_t *bytes = (uint8_t *)reply_file_list;
+    // size_t struct_size = sizeof(p_list_files_t);
+    //  for (size_t i = 0; i < struct_size; ++i)
+    //  {
+    //      printf("%02x ", bytes[i]);
+    //  }
+    //  printf("\n");
+
+    printf("Total Size: %ld\n", total_size);
+
+    reply_file_list->header.p_len = ntohl(total_size);
+
+    printf("New Reply Packet Header: %ld\n", sizeof(reply_file_list->header));
+    printf("New Reply Packet P-Len (After NTOHL): %d\n", reply_file_list->header.p_len);
+    send_all(client_sock, (uint8_t *)reply_file_list, reply_file_list->header.p_len);
     free(reply_file_list);
     printf("List Sent!\n");
-
     return 0;
 }
 
