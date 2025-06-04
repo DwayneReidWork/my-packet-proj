@@ -1,10 +1,10 @@
 import cmd2
 import socket
 import struct
-# from .netcomm import send_all, recv_expected
-# from .packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd
-from netcomm import send_all, recv_expected
-from packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd
+from .netcomm import send_all, recv_expected
+from .packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd
+# from netcomm import send_all, recv_expected
+# from packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd
 
 MAX_LIST_SIZE = 128
 MAX_FNAME_SIZE = 256
@@ -120,29 +120,22 @@ class CmdController(cmd2.Cmd):
 
         #receive
         packet_type, expected_len = self._check_packet_type(self.sock)
-        
+
         if(packet_type != PacketType.LIST_FILES):
             print(f"Unexpected packet type: {packet_type}")
             return
         if(None == expected_len):
             print(f'Invalid Length. {expected_len}')
             return
-        
-        '''Receive 1 byte for number of file names
-    For filename_i in range(that length):
-    receive 1 byte to know the file name length
-    receive that number of bytes for a file name'''
+
         response_data = recv_expected(self.sock, expected_len)
 
-        # hex_values_of_resp_data = [hex(byte) for byte in response_data]
-        # print(' '.join(hex_values_of_resp_data))
-
         if response_data:
-            filenames = parse_file_list(response_data)
+            filecount = response_data[0]
+            filenames = parse_file_list(response_data[1:], filecount)
             print("Files:")
             for f in filenames:
-                print(f" - {f}")
-            #print(f'Found Files:\n{response_data}')
+                print(f" - {f.decode()}")
         else:
             print("Error: Failed to receive valid response data.")
 
@@ -176,13 +169,23 @@ class CmdController(cmd2.Cmd):
 
         return packet_type, expected_len
 
-def parse_file_list(data: bytes):
-    count = data[0]
-    pos = 1
+def parse_file_list(data: bytes, filecount):
+    if not data:
+        return []
+
+    pos = 0
     filenames = []
-    for _ in range(count):
+
+    for _ in range(filecount):
+        if pos >= len(data):
+            raise ValueError("Not enough bytes for name_len")
+        
         name_len = data[pos]
         pos += 1
+
+        if pos + name_len > len(data):
+            raise ValueError("Not enough bytes for filename")
+        
         name = data[pos:pos+name_len]
         pos += name_len
         filenames.append(name)

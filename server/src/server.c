@@ -22,6 +22,7 @@ int handle_ping(int client_sock);
 int handle_multiplication(int client_sock, p_mul_t *mulpack);
 int handle_upload(int client_sock, p_upload_t *upload_pack);
 int receive_packet(int client_sock, p_header_t *header, uint8_t **dest);
+int serializeListPacket(p_list_files_t *pckt, uint8_t **buff);
 void ctrlc_handler(int dummy);
 volatile sig_atomic_t keep_running = 0;
 
@@ -349,15 +350,18 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
 
 int handle_list_files(int client_sock)
 {
+    uint8_t *reply_buff = NULL;
     p_list_files_t *reply_file_list;
     reply_file_list = malloc(sizeof(p_list_files_t));
+    memset(reply_file_list, 0, sizeof(p_list_files_t));
 
     if (NULL == reply_file_list)
     {
         perror("malloc failed");
         return -1;
     }
-    memset(reply_file_list, 0, sizeof(p_list_files_t));
+
+    reply_file_list->header.p_len = sizeof(reply_file_list->file_name_count);
 
     struct dirent *ent;
     reply_file_list->file_name_count = 0;
@@ -375,61 +379,34 @@ int handle_list_files(int client_sock)
         if (ent->d_type == DT_REG)
         {
             // realloc makes space for the new pointer
-            reply_file_list->dirFileName = realloc(reply_file_list->dirFileName, reply_file_list->file_name_count * sizeof(char *) + 1);
+            reply_file_list->dirFileName = realloc(reply_file_list->dirFileName, (reply_file_list->file_name_count + 1) * sizeof(char *));
 
-            reply_file_list->dirFileNameLen = realloc(reply_file_list->dirFileNameLen, reply_file_list->file_name_count * sizeof(uint8_t *));
+            reply_file_list->dirFileNameLen = realloc(reply_file_list->dirFileNameLen, (reply_file_list->file_name_count + 1) * sizeof(uint8_t));
 
             // copy name into struct
             char *temp = strdup(ent->d_name);
 
-            reply_file_list->dirFileName[reply_file_list->file_name_count] = strdup(ent->d_name);
+            reply_file_list->dirFileName[reply_file_list->file_name_count] = temp;
             // get name length assign to struct
             reply_file_list->dirFileNameLen[reply_file_list->file_name_count] = strlen(temp);
 
-            printf("File Name from Temp: %s\n", temp);
-            printf("Temp file sizes as looping through: %ld\n", strlen(temp));
+            reply_file_list->header.p_len += (strlen(temp) + sizeof(uint8_t));
 
             // increment file name counter
             reply_file_list->file_name_count++;
         }
     }
     closedir(dir);
-
     reply_file_list->header.msg_type = LIST_FILES;
-    // p_len = size of file names + number of file names
-    printf("FILE SIZE CALCULATION SHIT:\n");
-    printf("strlen/dirfilename: %ld\n", strlen(*reply_file_list->dirFileName));
-    printf("sizeof dirfilename: %ld\n", sizeof(*reply_file_list->dirFileName));
-    printf("sizeof dirfilenamelen: %ld\n", sizeof(reply_file_list->dirFileNameLen));
+    printf("P_Len before serialize: %d\n", reply_file_list->header.p_len);
+    int reply_size = serializeListPacket(reply_file_list, &reply_buff);
 
-    reply_file_list->header.p_len = strlen(*reply_file_list->dirFileName) +
-                                    sizeof(reply_file_list->dirFileNameLen);
+    printf("Reply Size: %d\n", reply_size);
 
-    printf("Reply Header P_Len: %d\n", reply_file_list->header.p_len);
+    send_all(client_sock, reply_buff, reply_size);
 
-    p_list_files_t *resized_reply_file_list;
-    ssize_t total_size = sizeof(resized_reply_file_list) + (reply_file_list->header.p_len);
-
-    resized_reply_file_list = realloc(reply_file_list, total_size);
-    reply_file_list = resized_reply_file_list;
-
-    // printf("Hex values: ");
-    // uint8_t *bytes = (uint8_t *)reply_file_list;
-    // size_t struct_size = sizeof(p_list_files_t);
-    //  for (size_t i = 0; i < struct_size; ++i)
-    //  {
-    //      printf("%02x ", bytes[i]);
-    //  }
-    //  printf("\n");
-
-    printf("Total Size: %ld\n", total_size);
-
-    reply_file_list->header.p_len = ntohl(total_size);
-
-    printf("New Reply Packet Header: %ld\n", sizeof(reply_file_list->header));
-    printf("New Reply Packet P-Len (After NTOHL): %d\n", reply_file_list->header.p_len);
-    send_all(client_sock, (uint8_t *)reply_file_list, reply_file_list->header.p_len);
     free(reply_file_list);
+    free(reply_buff);
     printf("List Sent!\n");
     return 0;
 }
@@ -439,4 +416,45 @@ void ctrlc_handler(int dummy)
     const char *error_message = "\nCTRL+C signal received.\n";
     write(STDERR_FILENO, error_message, strlen(error_message));
     keep_running = -1;
+}
+
+int serializeListPacket(p_list_files_t *pckt, uint8_t **buff)
+{
+    // Allocate packet buffer
+    size_t total_size = sizeof(pckt->header) + pckt->header.p_len;
+    *buff = malloc(total_size);
+    printf("Total size from serialize func: %ld\n", total_size);
+
+    uint8_t *ptr = *buff;
+
+    // Populate the header
+    memcpy(ptr, &pckt->header.msg_type, sizeof(pckt->header.msg_type));
+    ptr += sizeof(pckt->header.msg_type);
+
+    int p_len = htonl(pckt->header.p_len);
+    printf("P_Len before memcpy: %d\n", p_len);
+
+    memcpy(ptr, &p_len, sizeof(pckt->header.p_len));
+    ptr += sizeof(pckt->header.p_len);
+
+    // Populate the number of files
+    memcpy(ptr, &pckt->file_name_count, sizeof(pckt->file_name_count));
+    printf("File name count: %d\n", pckt->file_name_count);
+    ptr += sizeof(pckt->file_name_count);
+
+    // For each file
+    // Add the file name length
+    // Add the file name itself
+
+    for (size_t i = 0; i < pckt->file_name_count; i++)
+    {
+        uint8_t len = pckt->dirFileNameLen[i];
+        memcpy(ptr, &len, sizeof(uint8_t));
+        ptr += sizeof(uint8_t);
+
+        memcpy(ptr, pckt->dirFileName[i], len);
+        ptr += len;
+    }
+
+    return total_size;
 }
