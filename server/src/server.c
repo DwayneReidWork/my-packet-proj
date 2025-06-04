@@ -172,6 +172,7 @@ int handle_client(int client_sock)
             break;
         }
     }
+    close(client_sock);
     return 0;
 }
 
@@ -351,26 +352,17 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
 int handle_list_files(int client_sock)
 {
     uint8_t *reply_buff = NULL;
-    p_list_files_t *reply_file_list;
-    reply_file_list = malloc(sizeof(p_list_files_t));
-    memset(reply_file_list, 0, sizeof(p_list_files_t));
+    p_list_files_t reply_file_list = {0};
 
-    if (NULL == reply_file_list)
-    {
-        perror("malloc failed");
-        return -1;
-    }
-
-    reply_file_list->header.p_len = sizeof(reply_file_list->file_name_count);
+    reply_file_list.header.p_len = sizeof(reply_file_list.file_name_count);
 
     struct dirent *ent;
-    reply_file_list->file_name_count = 0;
+    reply_file_list.file_name_count = 0;
     DIR *dir = opendir(BASE_PATH);
 
     if (NULL == dir)
     {
         perror("Error opening directory");
-        free(reply_file_list);
         return -1;
     }
 
@@ -379,33 +371,32 @@ int handle_list_files(int client_sock)
         if (ent->d_type == DT_REG)
         {
             // realloc makes space for the new pointer
-            reply_file_list->dirFileName = realloc(reply_file_list->dirFileName, (reply_file_list->file_name_count + 1) * sizeof(char *));
+            reply_file_list.dirFileName = realloc(reply_file_list.dirFileName, (reply_file_list.file_name_count + 1) * sizeof(char *));
 
-            reply_file_list->dirFileNameLen = realloc(reply_file_list->dirFileNameLen, (reply_file_list->file_name_count + 1) * sizeof(uint8_t));
+            reply_file_list.dirFileNameLen = realloc(reply_file_list.dirFileNameLen, (reply_file_list.file_name_count + 1) * sizeof(uint8_t));
 
             // copy name into struct
             char *temp = strdup(ent->d_name);
 
-            reply_file_list->dirFileName[reply_file_list->file_name_count] = temp;
+            reply_file_list.dirFileName[reply_file_list.file_name_count] = temp;
             // get name length assign to struct
-            reply_file_list->dirFileNameLen[reply_file_list->file_name_count] = strlen(temp);
+            reply_file_list.dirFileNameLen[reply_file_list.file_name_count] = strlen(temp);
 
-            reply_file_list->header.p_len += (strlen(temp) + sizeof(uint8_t));
+            reply_file_list.header.p_len += (strlen(temp) + sizeof(uint8_t));
 
             // increment file name counter
-            reply_file_list->file_name_count++;
+            reply_file_list.file_name_count++;
         }
     }
     closedir(dir);
-    reply_file_list->header.msg_type = LIST_FILES;
-    printf("P_Len before serialize: %d\n", reply_file_list->header.p_len);
-    int reply_size = serializeListPacket(reply_file_list, &reply_buff);
+    reply_file_list.header.msg_type = LIST_FILES;
+    printf("P_Len before serialize: %d\n", reply_file_list.header.p_len);
+    int reply_size = serializeListPacket(&reply_file_list, &reply_buff);
 
     printf("Reply Size: %d\n", reply_size);
 
     send_all(client_sock, reply_buff, reply_size);
 
-    free(reply_file_list);
     free(reply_buff);
     printf("List Sent!\n");
     return 0;
