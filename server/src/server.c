@@ -23,17 +23,20 @@ int handle_multiplication(int client_sock, p_mul_t *mulpack);
 int handle_upload(int client_sock, p_upload_t *upload_pack);
 int receive_packet(int client_sock, p_header_t *header, uint8_t **dest);
 int serializeListPacket(p_list_files_t *pckt, uint8_t **buff);
+int validate_socket(int client_sock);
 void ctrlc_handler(int dummy);
 volatile sig_atomic_t keep_running = 0;
 
 int server_setup()
 {
+    // Signal Handler Stuff
     struct sigaction sa;
     sa.sa_handler = ctrlc_handler;
     sa.sa_flags = 0;
     sigemptyset(&sa.sa_mask);
     sigaction(SIGINT, &sa, NULL);
 
+    // Server Setup Stuff
     int server_fd, new_socket;
     struct sockaddr_in address;
     int opt = 1;
@@ -104,9 +107,12 @@ int server_setup()
 
 int handle_client(int client_sock)
 {
+    validate_socket(client_sock);
+
     uint8_t *data = NULL;
     p_header_t header;
 
+    // Loop to continue receiving packets
     while (-1 != keep_running)
     {
         switch (receive_packet(client_sock, &header, &data))
@@ -140,7 +146,7 @@ int handle_client(int client_sock)
             // Allocate a dynamic buffer to hold header + data
             uint32_t payload_len = ntohl(header.p_len);
             p_upload_t *upload_pack = malloc(sizeof(p_upload_t) + payload_len);
-            if (!upload_pack)
+            if (NULL == upload_pack)
             {
                 perror("malloc failed");
                 free(data);
@@ -178,7 +184,10 @@ int handle_client(int client_sock)
 
 int receive_packet(int client_sock, p_header_t *header, uint8_t **dest)
 {
+    validate_socket(client_sock);
+
     printf("Waiting for Packet.\n");
+
     if (NULL == header)
     {
         perror("Header Invalid");
@@ -216,6 +225,8 @@ int receive_packet(int client_sock, p_header_t *header, uint8_t **dest)
 
 int handle_ping(int client_sock)
 {
+    validate_socket(client_sock);
+
     // create packet
     p_header_t ping_reply = {.msg_type = PING, .p_len = 0};
 
@@ -232,6 +243,14 @@ int handle_ping(int client_sock)
 
 int handle_multiplication(int client_sock, p_mul_t *mulpack)
 {
+    validate_socket(client_sock);
+
+    if (NULL == mulpack)
+    {
+        perror("Mul Packet Error Error");
+        return -1;
+    }
+
     int32_t num_host = ntohl(mulpack->num);
 
     int32_t result = num_host * 2;
@@ -252,6 +271,14 @@ int handle_multiplication(int client_sock, p_mul_t *mulpack)
 
 int handle_upload(int client_sock, p_upload_t *upload_pack)
 {
+    validate_socket(client_sock);
+
+    if (NULL == upload_pack)
+    {
+        perror("Upload Packet Error Error");
+        return -1;
+    }
+
     p_header_t header = upload_pack->header;
     uint32_t payload_len = ntohl(header.p_len);
 
@@ -278,8 +305,9 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
         free(upload_pkt);
         return -1;
     }
-
+    // set delimeter to null char
     *delimiter_pos = '\0';
+    // increment ptr to content
     char *content = delimiter_pos + 1;
 
     size_t filename_len = strlen(filename) + 1;
@@ -351,11 +379,14 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
 
 int handle_list_files(int client_sock)
 {
+    validate_socket(client_sock);
+    // Buffer to store list
     uint8_t *reply_buff = NULL;
+    // reate base for packet
     p_list_files_t reply_file_list = {0};
-
     reply_file_list.header.p_len = sizeof(reply_file_list.file_name_count);
 
+    // Dirent to get list of files
     struct dirent *ent;
     reply_file_list.file_name_count = 0;
     DIR *dir = opendir(BASE_PATH);
@@ -365,72 +396,81 @@ int handle_list_files(int client_sock)
         perror("Error opening directory");
         return -1;
     }
-
+    // Loop through directory
     while (NULL != (ent = readdir(dir)))
     {
+        // if the file found is a file and not a directory
         if (ent->d_type == DT_REG)
         {
-            // realloc makes space for the new pointer
+            // realloc makes space for the new pointer for name
             reply_file_list.dirFileName = realloc(reply_file_list.dirFileName, (reply_file_list.file_name_count + 1) * sizeof(char *));
 
+            // realloc makes space for the new pointer for name length
             reply_file_list.dirFileNameLen = realloc(reply_file_list.dirFileNameLen, (reply_file_list.file_name_count + 1) * sizeof(uint8_t));
 
-            // copy name into struct
+            // string duplicate -> copy name into struct
             char *temp = strdup(ent->d_name);
 
             reply_file_list.dirFileName[reply_file_list.file_name_count] = temp;
             // get name length assign to struct
             reply_file_list.dirFileNameLen[reply_file_list.file_name_count] = strlen(temp);
 
+            // increment new packet size for every file found
+            // add file name length plus pointer to it
             reply_file_list.header.p_len += (strlen(temp) + sizeof(uint8_t));
 
             // increment file name counter
             reply_file_list.file_name_count++;
         }
     }
+    // Close dirent directory
     closedir(dir);
+    // put together packet
     reply_file_list.header.msg_type = LIST_FILES;
-    printf("P_Len before serialize: %d\n", reply_file_list.header.p_len);
+    // get actual size of fata to send over
     int reply_size = serializeListPacket(&reply_file_list, &reply_buff);
-
-    printf("Reply Size: %d\n", reply_size);
-
+    // Send data
     send_all(client_sock, reply_buff, reply_size);
-
+    // Free Buffer
     free(reply_buff);
     printf("List Sent!\n");
     return 0;
 }
 
-void ctrlc_handler(int dummy)
-{
-    const char *error_message = "\nCTRL+C signal received.\n";
-    write(STDERR_FILENO, error_message, strlen(error_message));
-    keep_running = -1;
-}
-
 int serializeListPacket(p_list_files_t *pckt, uint8_t **buff)
 {
+    if (NULL == pckt)
+    {
+        perror("Serialization packet error");
+        return -1;
+    }
+
+    if (NULL != *buff)
+    {
+        perror("Serialization Buffer error");
+        return -1;
+    }
+
     // Allocate packet buffer
     size_t total_size = sizeof(pckt->header) + pckt->header.p_len;
     *buff = malloc(total_size);
-    printf("Total size from serialize func: %ld\n", total_size);
-
+    // move pointer
     uint8_t *ptr = *buff;
 
     // Populate the header
     memcpy(ptr, &pckt->header.msg_type, sizeof(pckt->header.msg_type));
     ptr += sizeof(pckt->header.msg_type);
 
+    // convert endianness
     int p_len = htonl(pckt->header.p_len);
-    printf("P_Len before memcpy: %d\n", p_len);
-
+    // copy to buffer
     memcpy(ptr, &p_len, sizeof(pckt->header.p_len));
+    // move pointer
     ptr += sizeof(pckt->header.p_len);
 
     // Populate the number of files
     memcpy(ptr, &pckt->file_name_count, sizeof(pckt->file_name_count));
-    printf("File name count: %d\n", pckt->file_name_count);
+    // move pointer
     ptr += sizeof(pckt->file_name_count);
 
     // For each file
@@ -440,12 +480,31 @@ int serializeListPacket(p_list_files_t *pckt, uint8_t **buff)
     for (size_t i = 0; i < pckt->file_name_count; i++)
     {
         uint8_t len = pckt->dirFileNameLen[i];
+        // Copy file length to buffer
         memcpy(ptr, &len, sizeof(uint8_t));
+        // move pointer
         ptr += sizeof(uint8_t);
-
+        // copy matching file name to buffer
         memcpy(ptr, pckt->dirFileName[i], len);
         ptr += len;
     }
-
+    // return total size of buffer (which is used to send it back in the calling function)
     return total_size;
+}
+
+int validate_socket(int client_sock)
+{
+    if (-1 == client_sock)
+    {
+        perror("Socket Error");
+        return -1;
+    }
+    return 0;
+}
+
+void ctrlc_handler(int dummy)
+{
+    const char *error_message = "\nCTRL+C signal received.\n";
+    write(STDERR_FILENO, error_message, strlen(error_message));
+    keep_running = -1;
 }
