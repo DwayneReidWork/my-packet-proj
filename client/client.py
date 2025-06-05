@@ -153,6 +153,23 @@ class CmdController(cmd2.Cmd):
         except Exception as e:
             print(e)
             return
+        
+        #receive
+        packet_type, expected_len = self._check_packet_type(self.sock)
+
+        if(packet_type != PacketType.RUN_CMD):
+            print(f"Unexpected packet type: {packet_type}")
+            return
+        if(None == expected_len):
+            print(f'Invalid Length. {expected_len}')
+            return
+
+        response_data = recv_expected(self.sock, expected_len)
+
+        if response_data:
+            print(response_data)
+        else:
+            print("Error: Failed to receive valid response data.")
 
     def _check_packet_type(self, args):
         header_format = '!BI'

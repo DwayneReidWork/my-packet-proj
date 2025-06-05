@@ -384,11 +384,11 @@ int handle_list_files(int client_sock)
     uint8_t *reply_buff = NULL;
     // reate base for packet
     p_list_files_t reply_file_list = {0};
-    reply_file_list.header.p_len = sizeof(reply_file_list.file_name_count);
+    reply_file_list.header.p_len = sizeof(reply_file_list.file_count);
 
     // Dirent to get list of files
     struct dirent *ent;
-    reply_file_list.file_name_count = 0;
+    reply_file_list.file_count = 0;
     DIR *dir = opendir(BASE_PATH);
 
     if (NULL == dir)
@@ -403,24 +403,24 @@ int handle_list_files(int client_sock)
         if (ent->d_type == DT_REG)
         {
             // realloc makes space for the new pointer for name
-            reply_file_list.dirFileName = realloc(reply_file_list.dirFileName, (reply_file_list.file_name_count + 1) * sizeof(char *));
+            reply_file_list.FileName = realloc(reply_file_list.FileName, (reply_file_list.file_count + 1) * sizeof(char *));
 
             // realloc makes space for the new pointer for name length
-            reply_file_list.dirFileNameLen = realloc(reply_file_list.dirFileNameLen, (reply_file_list.file_name_count + 1) * sizeof(uint8_t));
+            reply_file_list.FileNameLen = realloc(reply_file_list.FileNameLen, (reply_file_list.file_count + 1) * sizeof(uint8_t));
 
             // string duplicate -> copy name into struct
             char *temp = strdup(ent->d_name);
 
-            reply_file_list.dirFileName[reply_file_list.file_name_count] = temp;
+            reply_file_list.FileName[reply_file_list.file_count] = temp;
             // get name length assign to struct
-            reply_file_list.dirFileNameLen[reply_file_list.file_name_count] = strlen(temp);
+            reply_file_list.FileNameLen[reply_file_list.file_count] = strlen(temp);
 
             // increment new packet size for every file found
             // add file name length plus pointer to it
             reply_file_list.header.p_len += (strlen(temp) + sizeof(uint8_t));
 
             // increment file name counter
-            reply_file_list.file_name_count++;
+            reply_file_list.file_count++;
         }
     }
     // Close dirent directory
@@ -469,23 +469,23 @@ int serializeListPacket(p_list_files_t *pckt, uint8_t **buff)
     ptr += sizeof(pckt->header.p_len);
 
     // Populate the number of files
-    memcpy(ptr, &pckt->file_name_count, sizeof(pckt->file_name_count));
+    memcpy(ptr, &pckt->file_count, sizeof(pckt->file_count));
     // move pointer
-    ptr += sizeof(pckt->file_name_count);
+    ptr += sizeof(pckt->file_count);
 
     // For each file
     // Add the file name length
     // Add the file name itself
 
-    for (size_t i = 0; i < pckt->file_name_count; i++)
+    for (size_t i = 0; i < pckt->file_count; i++)
     {
-        uint8_t len = pckt->dirFileNameLen[i];
+        uint8_t len = pckt->FileNameLen[i];
         // Copy file length to buffer
         memcpy(ptr, &len, sizeof(uint8_t));
         // move pointer
         ptr += sizeof(uint8_t);
         // copy matching file name to buffer
-        memcpy(ptr, pckt->dirFileName[i], len);
+        memcpy(ptr, pckt->FileName[i], len);
         ptr += len;
     }
     // return total size of buffer (which is used to send it back in the calling function)

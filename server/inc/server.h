@@ -45,16 +45,16 @@ typedef struct __attribute__((__packed__))
 typedef struct __attribute__((__packed__))
 {
     p_header_t header;
-    uint8_t file_name_count;
-    uint8_t *dirFileNameLen;
-    char **dirFileName;
+    uint8_t file_count;
+    uint8_t *FileNameLen;
+    char **FileName;
 } p_list_files_t;
 
 // Run Cmd Packet Format
 typedef struct __attribute__((__packed__))
 {
     p_header_t header;
-    uint8_t *command;
+    char **cmd_output;
 } p_cmd_t;
 
 int server_setup();
