@@ -140,7 +140,7 @@ class CmdController(cmd2.Cmd):
             print("Error: Failed to receive valid response data.")
 
     run_cmd_parser = cmd2.Cmd2ArgumentParser()
-    run_cmd_parser.add_argument('cmd', type=str, action='store', help='The command to run on the other side.')
+    run_cmd_parser.add_argument('cmd', type=str, action='store', help='Insert Command to execute "in quotes".')
     @cmd2.with_argparser(run_cmd_parser)
     def do_run_cmd(self, args):
         if self.sock is None:
@@ -148,7 +148,7 @@ class CmdController(cmd2.Cmd):
         try:
             cmd_packet = Run_Cmd(args.cmd).pack()
             send_all(self.sock, cmd_packet)
-            print("Command Send.")
+            print("Command Sent.")
 
         except Exception as e:
             print(e)
@@ -167,7 +167,7 @@ class CmdController(cmd2.Cmd):
         response_data = recv_expected(self.sock, expected_len)
 
         if response_data:
-            print(response_data)
+            print(response_data.decode())
         else:
             print("Error: Failed to receive valid response data.")
 

@@ -20,6 +20,7 @@ int handle_client(int client_sock);
 int handle_list_files(int client_sock);
 int handle_ping(int client_sock);
 int handle_multiplication(int client_sock, p_mul_t *mulpack);
+int handle_run_cmd(int client_sock, p_cmd_t *cmd_pack, char *cmd);
 int handle_upload(int client_sock, p_upload_t *upload_pack);
 int receive_packet(int client_sock, p_header_t *header, uint8_t **dest);
 int serializeListPacket(p_list_files_t *pckt, uint8_t **buff);
@@ -160,7 +161,6 @@ int handle_client(int client_sock)
             {
                 perror("Error in Handle Upload");
                 free(data);
-                free(upload_pack);
                 return -1;
             }
 
@@ -171,13 +171,32 @@ int handle_client(int client_sock)
             handle_list_files(client_sock);
             break;
         case RUN_CMD:
-            printf("Received Cmd to run.\n");
+            printf("Received Cmd Packet.\n");
+            uint32_t cmd_len = ntohl(header.p_len);
+            p_cmd_t *cmd_pack = malloc(sizeof(p_cmd_t) + cmd_len + 1);
+
+            if (NULL == cmd_pack)
+            {
+                perror("malloc failed");
+                free(data);
+                return -1;
+            }
+            // copy header into pack
+            memcpy(&cmd_pack->header, &header, sizeof(header));
+            // memcpy the command to the pack
+            memcpy(cmd_pack->cmd, data, cmd_len);
+            // null terminate cmd
+            cmd_pack->cmd[cmd_len] = '\0';
+            // pass cmd to be handled
+            printf("Cmd Received: %s\n", cmd_pack->cmd);
+            handle_run_cmd(client_sock, cmd_pack, cmd_pack->cmd);
             break;
         default:
             printf("Invalid Packet Type Received\n");
             break;
         }
     }
+    free(data);
     close(client_sock);
     return 0;
 }
@@ -282,27 +301,12 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
     p_header_t header = upload_pack->header;
     uint32_t payload_len = ntohl(header.p_len);
 
-    p_upload_t *upload_pkt = malloc(sizeof(p_upload_t) + payload_len);
-    if (NULL == upload_pkt)
-    {
-        perror("Failed to allocate upload packet");
-        return -1;
-    }
-
-    // fixed warning of uninitialized thingy
-    memset(upload_pkt, 0, sizeof(p_upload_t) + payload_len);
-
-    memcpy(&upload_pkt->header, &upload_pack->header, sizeof(header));
-    memcpy(upload_pkt->upload_data, upload_pack->upload_data, payload_len);
-
-    // Parse upload_data: "filename|filecontents"
-    char *filename = (char *)upload_pkt->upload_data;
+    char *filename = (char *)upload_pack->upload_data;
     char *delimiter_pos = strchr(filename, '|');
 
     if (NULL == delimiter_pos)
     {
         fprintf(stderr, "Delimiter not found in upload data.\n");
-        free(upload_pkt);
         return -1;
     }
     // set delimeter to null char
@@ -316,7 +320,6 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
     if (0 == strlen(filename) || 0 == content_size)
     {
         fprintf(stderr, "Filename or content missing\n");
-        free(upload_pkt);
         return -1;
     }
 
@@ -327,7 +330,6 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
     if (-1 == fd)
     {
         perror("Error opening file");
-        free(upload_pkt);
         return -1;
     }
 
@@ -339,14 +341,12 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
         {
             perror("Error writing to file");
             close(fd);
-            free(upload_pkt);
             return -1;
         }
         bytes_written += written;
     }
 
     close(fd);
-    free(upload_pkt);
     printf("Write Successful\n");
 
     const char *msg = "Upload Successful";
@@ -373,7 +373,6 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
 
     free(upload_reply);
     printf("Upload response sent successfully.\n");
-
     return 0;
 }
 
@@ -453,12 +452,19 @@ int serializeListPacket(p_list_files_t *pckt, uint8_t **buff)
 
     // Allocate packet buffer
     size_t total_size = sizeof(pckt->header) + pckt->header.p_len;
+
     *buff = malloc(total_size);
+    if (NULL == *buff)
+    {
+        perror("Malloc Failed");
+        return -1;
+    }
     // move pointer
     uint8_t *ptr = *buff;
 
     // Populate the header
     memcpy(ptr, &pckt->header.msg_type, sizeof(pckt->header.msg_type));
+    // move ptr
     ptr += sizeof(pckt->header.msg_type);
 
     // convert endianness
@@ -486,6 +492,7 @@ int serializeListPacket(p_list_files_t *pckt, uint8_t **buff)
         ptr += sizeof(uint8_t);
         // copy matching file name to buffer
         memcpy(ptr, pckt->FileName[i], len);
+        // move ptr
         ptr += len;
     }
     // return total size of buffer (which is used to send it back in the calling function)
@@ -507,4 +514,70 @@ void ctrlc_handler(int dummy)
     const char *error_message = "\nCTRL+C signal received.\n";
     write(STDERR_FILENO, error_message, strlen(error_message));
     keep_running = -1;
+}
+
+int handle_run_cmd(int client_sock, p_cmd_t *cmd_pack, char *cmd)
+{
+    validate_socket(client_sock);
+    // initial buffer
+    char temp[1024];
+    // realloced to proper size
+    char *reply_buff = NULL;
+
+    size_t size = 0;
+    // ptr to run cmd
+    FILE *fp = popen(cmd, "r");
+
+    if (NULL == fp)
+    {
+        perror("Failed to create file pointer");
+        return -1;
+    }
+
+    while (fgets(temp, sizeof(temp), fp))
+    {
+        // calcute necessary buff size
+
+        size_t len = strlen(temp);
+        // realloc appropriate size
+        char *new_buf = realloc(reply_buff, size + len + 1);
+        if (!new_buf)
+        {
+            free(reply_buff);
+            pclose(fp);
+            return -1;
+        }
+        reply_buff = new_buf;
+        memcpy(reply_buff + size, temp, len);
+        size += len;
+        reply_buff[size] = '\0';
+    }
+    pclose(fp);
+    size_t total_size = sizeof(p_cmd_t) + size;
+    p_cmd_t *reply_pack = malloc(total_size);
+    if (NULL == reply_pack)
+    {
+        perror("malloc failed");
+        free(reply_buff);
+        return -1;
+    }
+
+    reply_pack->header.msg_type = RUN_CMD;
+    reply_pack->header.p_len = htonl(size);
+
+    // Copy command output
+    memcpy(reply_pack->cmd, reply_buff, size);
+    free(reply_buff);
+
+    ssize_t bytes_sent = send_all(client_sock, (uint8_t *)reply_pack, total_size);
+    if (0 > bytes_sent)
+    {
+        perror("send_all failed");
+        free(reply_pack);
+        return -1;
+    }
+
+    free(reply_pack);
+    printf("Command output sent successfully.\n");
+    return 0;
 }

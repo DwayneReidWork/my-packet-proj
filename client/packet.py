@@ -68,13 +68,13 @@ class List_Files(Packet):
         return super().pack()
 
 class Run_Cmd(Packet):
-    def __init__(self, data: str):
-        self.data = data
+    def __init__(self, cmd: str):
+        self.cmd = cmd
         super().__init__(PacketType.RUN_CMD)
 
     def pack(self) -> bytes:
-        return super().pack() + self.data.encode('utf-8')
+        return super().pack() + self.cmd.encode('utf-8')
     
     def packet_size(self) -> int:
-        data = self.data.encode()
+        data = self.cmd.encode()
         return len(data)

@@ -54,7 +54,7 @@ typedef struct __attribute__((__packed__))
 typedef struct __attribute__((__packed__))
 {
     p_header_t header;
-    char **cmd_output;
+    char cmd[];
 } p_cmd_t;
 
 int server_setup();
