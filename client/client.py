@@ -40,7 +40,7 @@ class CmdController(cmd2.Cmd):
 
         if packet_type == PacketType.PING:
             if expected_len != 0:
-                print(f"Warning: expected 0-length ping response, got {expected_len}")
+                print(f"Expected 0-length ping response, got {expected_len}")
                 _ = recv_expected(self.sock, expected_len)  # Drain extra if sent
             print('Ping Successful!')
         else:
@@ -156,7 +156,7 @@ class CmdController(cmd2.Cmd):
         
         #receive
         packet_type, expected_len = self._check_packet_type(self.sock)
-
+        
         if(packet_type != PacketType.RUN_CMD):
             print(f"Unexpected packet type: {packet_type}")
             return
@@ -164,10 +164,13 @@ class CmdController(cmd2.Cmd):
             print(f'Invalid Length. {expected_len}')
             return
 
+        # print("Hex Response:")
         response_data = recv_expected(self.sock, expected_len)
+        # hex_values_of_resp_data = [hex(byte) for byte in response_data]
+        # print(' '.join(hex_values_of_resp_data))
 
         if response_data:
-            print(response_data.decode())
+            print("Reply:\n"+response_data.decode())
         else:
             print("Error: Failed to receive valid response data.")
 

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -108,7 +109,11 @@ int server_setup()
 
 int handle_client(int client_sock)
 {
-    validate_socket(client_sock);
+    if (-1 == validate_socket(client_sock))
+    {
+        perror("Socket Error!");
+        return -1;
+    }
 
     uint8_t *data = NULL;
     p_header_t header;
@@ -203,7 +208,11 @@ int handle_client(int client_sock)
 
 int receive_packet(int client_sock, p_header_t *header, uint8_t **dest)
 {
-    validate_socket(client_sock);
+    if (-1 == validate_socket(client_sock))
+    {
+        perror("Socket Error!");
+        return -1;
+    }
 
     printf("Waiting for Packet.\n");
 
@@ -244,7 +253,11 @@ int receive_packet(int client_sock, p_header_t *header, uint8_t **dest)
 
 int handle_ping(int client_sock)
 {
-    validate_socket(client_sock);
+    if (-1 == validate_socket(client_sock))
+    {
+        perror("Socket Error!");
+        return -1;
+    }
 
     // create packet
     p_header_t ping_reply = {.msg_type = PING, .p_len = 0};
@@ -290,7 +303,11 @@ int handle_multiplication(int client_sock, p_mul_t *mulpack)
 
 int handle_upload(int client_sock, p_upload_t *upload_pack)
 {
-    validate_socket(client_sock);
+    if (-1 == validate_socket(client_sock))
+    {
+        perror("Socket Error!");
+        return -1;
+    }
 
     if (NULL == upload_pack)
     {
@@ -503,7 +520,6 @@ int validate_socket(int client_sock)
 {
     if (-1 == client_sock)
     {
-        perror("Socket Error");
         return -1;
     }
     return 0;
@@ -518,66 +534,79 @@ void ctrlc_handler(int dummy)
 
 int handle_run_cmd(int client_sock, p_cmd_t *cmd_pack, char *cmd)
 {
-    validate_socket(client_sock);
-    // initial buffer
-    char temp[1024];
-    // realloced to proper size
-    char *reply_buff = NULL;
-
-    size_t size = 0;
-    // ptr to run cmd
-    FILE *fp = popen(cmd, "r");
-
-    if (NULL == fp)
+    printf("Inside Handle_run_md\n");
+    if (-1 == validate_socket(client_sock))
     {
-        perror("Failed to create file pointer");
+        perror("Socket Error!");
         return -1;
     }
 
-    while (fgets(temp, sizeof(temp), fp))
+    int fd[2];
+    if (-1 == pipe(fd))
     {
-        // calcute necessary buff size
+        perror("Pipe Creation Error.");
+        return -1;
+    }
+    pid_t pid = fork();
 
-        size_t len = strlen(temp);
-        // realloc appropriate size
-        char *new_buf = realloc(reply_buff, size + len + 1);
-        if (!new_buf)
+    if (-1 == pid)
+    {
+        perror("Error Forking.");
+        return -1;
+    }
+    else if (0 == pid)
+    {
+        // Child Process
+        //  close listening side
+        printf("Inside Child Process\n");
+        close(fd[0]);
+        dup2(fd[1], STDOUT_FILENO);
+        dup2(fd[1], STDERR_FILENO);
+        close(fd[1]);
+        printf("Right before execlp.\n");
+        execlp("sh", "sh", "-c", cmd, (char *)NULL);
+    }
+    else
+    {
+        // Parent process
+        // Close write end
+        close(fd[1]);
+        char buffer[1024] = {0};
+        ssize_t bytes_read;
+        size_t total_bytes = 0;
+
+        while (0 < (bytes_read = read(fd[0], buffer, sizeof(buffer))))
         {
-            free(reply_buff);
-            pclose(fp);
+            total_bytes += bytes_read;
+        }
+
+        printf("Buffer:\n%s\nTotal Bytes Read: %ld\n", buffer, total_bytes);
+        size_t total_size = sizeof(p_cmd_t) + total_bytes;
+        p_cmd_t *cmd_reply = malloc(total_size);
+        if (NULL == cmd_reply)
+        {
+            perror("Malloc failed");
             return -1;
         }
-        reply_buff = new_buf;
-        memcpy(reply_buff + size, temp, len);
-        size += len;
-        reply_buff[size] = '\0';
+
+        cmd_reply->header.msg_type = RUN_CMD;
+        cmd_reply->header.p_len = htonl(total_bytes);
+        memcpy(cmd_reply->cmd, buffer, total_bytes);
+
+        if (-1 == send_all(client_sock, (uint8_t *)cmd_reply, total_size))
+        {
+            perror("Sendall Failed.");
+            return -1;
+        }
+
+        free(cmd_reply);
+        close(fd[0]);
+        waitpid(pid, NULL, 0);
     }
-    pclose(fp);
-    size_t total_size = sizeof(p_cmd_t) + size;
-    p_cmd_t *reply_pack = malloc(total_size);
-    if (NULL == reply_pack)
-    {
-        perror("malloc failed");
-        free(reply_buff);
-        return -1;
-    }
-
-    reply_pack->header.msg_type = RUN_CMD;
-    reply_pack->header.p_len = htonl(size);
-
-    // Copy command output
-    memcpy(reply_pack->cmd, reply_buff, size);
-    free(reply_buff);
-
-    ssize_t bytes_sent = send_all(client_sock, (uint8_t *)reply_pack, total_size);
-    if (0 > bytes_sent)
-    {
-        perror("send_all failed");
-        free(reply_pack);
-        return -1;
-    }
-
-    free(reply_pack);
-    printf("Command output sent successfully.\n");
     return 0;
 }
+//         // //Hex Print
+//         // printf("Sent Data (Hex):\n");
+//         // for (ssize_t i = 0; i < (sizeof(p_cmd_t) + size); i++)
+//         //     printf("%02X ", ((uint8_t *)reply_pack)[i]);
+//         // printf("\n");

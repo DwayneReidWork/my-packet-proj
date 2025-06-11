@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 
-// Function to send all data, returns 0 on success, -1 on failure
+// Function to send all data, returns total bits on success, -1 on failure
 int send_all(int sock, const uint8_t *data, size_t data_len)
 {
     size_t total_sent_bits = 0;
