@@ -8,9 +8,10 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "../inc/packet.h"
 #include "../inc/netcomm.h"
+#include "../inc/packet.h"
 #include "../inc/server.h"
+#include "../inc/signal.h"
 
 #define BASE_PATH "server/for_uploads/"
 
@@ -83,22 +84,27 @@ int handle_ping(int client_sock)
 
 int handle_multiplication(int client_sock, p_mul_t *mulpack)
 {
-    validate_socket(client_sock);
+    if (-1 == validate_socket(client_sock))
+    {
+        perror("Socket Error!");
+        return -1;
+    }
 
     if (NULL == mulpack)
     {
         perror("Mul Packet Error Error");
         return -1;
     }
-
+    // convert num endianness
     int32_t num_host = ntohl(mulpack->num);
-
+    // do math
     int32_t result = num_host * 2;
-
+    // build packet reconvert number endiannesses
     p_mul_t mul_response = {.header.msg_type = MUL,
                             .header.p_len = htonl(sizeof(mulpack->num)),
                             .num = htonl(result)};
 
+    // send packet
     ssize_t bytes_sent = send_all(client_sock, (const uint8_t *)&mul_response, sizeof(p_mul_t));
     if (0 > bytes_sent)
     {
@@ -150,7 +156,7 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
 
     char full_path[BUFFER_SIZE];
     snprintf(full_path, sizeof(full_path), "%s%s", BASE_PATH, filename);
-
+    // open file (full path, write only, if not exist then create, if exists truncate it (empty out), #### = permissions for create)
     int fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (-1 == fd)
     {
@@ -176,18 +182,19 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
 
     const char *msg = "Upload Successful";
     size_t msg_len = strlen(msg) + 1;
-
+    // allocate size for successful reply
     p_upload_t *upload_reply = malloc(sizeof(p_upload_t) + msg_len);
     if (NULL == upload_reply)
     {
         perror("Failed to allocate upload reply");
         return -1;
     }
-
+    // build packet
     upload_reply->header.msg_type = UPLOAD;
     upload_reply->header.p_len = htonl(msg_len);
     memcpy(upload_reply->upload_data, msg, msg_len);
 
+    // send
     ssize_t bytes_sent = send_all(client_sock, (uint8_t *)upload_reply, sizeof(p_header_t) + msg_len);
     if (0 > bytes_sent)
     {
@@ -203,10 +210,14 @@ int handle_upload(int client_sock, p_upload_t *upload_pack)
 
 int handle_list_files(int client_sock)
 {
-    validate_socket(client_sock);
+    if (-1 == validate_socket(client_sock))
+    {
+        perror("Socket Error!");
+        return -1;
+    }
     // Buffer to store list
     uint8_t *reply_buff = NULL;
-    // reate base for packet
+    // create base for reply packet
     p_list_files_t reply_file_list = {0};
     reply_file_list.header.p_len = sizeof(reply_file_list.file_count);
 
@@ -284,7 +295,7 @@ int serializeListPacket(p_list_files_t *pckt, uint8_t **buff)
         perror("Malloc Failed");
         return -1;
     }
-    // move pointer
+    // start pointer at beginning
     uint8_t *ptr = *buff;
 
     // Populate the header
@@ -310,6 +321,7 @@ int serializeListPacket(p_list_files_t *pckt, uint8_t **buff)
 
     for (size_t i = 0; i < pckt->file_count; i++)
     {
+        // get len to know how much to copy
         uint8_t len = pckt->FileNameLen[i];
         // Copy file length to buffer
         memcpy(ptr, &len, sizeof(uint8_t));

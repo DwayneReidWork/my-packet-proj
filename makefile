@@ -3,8 +3,8 @@ CC = gcc --std gnu99
 CFLAGS = -Wall -g
 
 # Source and header files
-SRCS = server/src/main.c server/src/netcomm.c server/src/server.c server/src/packet.c
-HDRS = server/inc/netcomm.h server/inc/server.h server/inc/packet.h
+SRCS = server/src/main.c server/src/netcomm.c server/src/server.c server/src/packet.c server/src/signal.c
+HDRS = server/inc/netcomm.h server/inc/server.h server/inc/packet.h server/inc/signal.h
 
 # Object files
 OBJS = $(SRCS:.c=.o)

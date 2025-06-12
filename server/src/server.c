@@ -1,6 +1,5 @@
 #include <arpa/inet.h>
 #include <dirent.h>
-#include <fcntl.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,50 +11,22 @@
 #include <unistd.h>
 
 #include "../inc/netcomm.h"
-#include "../inc/server.h"
 #include "../inc/packet.h"
+#include "../inc/server.h"
+#include "../inc/signal.h"
 
 #define CMD_TIMEOUT 5
 #define PORT 1234
 
 int handle_client(int client_sock);
-int signal_handler_setup();
-
-void ctrlc_handler(int dummy);
-void timeout_handler(int sig);
-
-volatile sig_atomic_t child_pid = -1;
-volatile sig_atomic_t keep_running = 0;
-
-int signal_handler_setup()
-{
-    struct sigaction sa;
-    sa.sa_handler = ctrlc_handler;
-    sa.sa_flags = 0;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGINT, &sa, NULL);
-    if (sigaction(SIGINT, &sa, NULL) == -1)
-    {
-        perror("sigaction SIGINT");
-        return -1;
-    }
-
-    struct sigaction sa_alrm;
-    sa_alrm.sa_handler = timeout_handler;
-    sa_alrm.sa_flags = 0;
-    sigemptyset(&sa_alrm.sa_mask);
-    sigaction(SIGALRM, &sa_alrm, NULL);
-    if (sigaction(SIGALRM, &sa_alrm, NULL) == -1)
-    {
-        perror("sigaction SIGALRM");
-        return -1;
-    }
-    return 0;
-}
 
 int server_setup()
 {
-    signal_handler_setup();
+    if (0 != signal_handler_setup())
+    {
+        perror("Signal Handler Error");
+        return -1;
+    }
     // Server Setup Stuff
     int server_fd, new_socket;
     struct sockaddr_in address;
@@ -233,21 +204,6 @@ int validate_socket(int client_sock)
     return 0;
 }
 
-void ctrlc_handler(int dummy)
-{
-    const char *error_message = "\nCTRL+C signal received.\n";
-    write(STDERR_FILENO, error_message, strlen(error_message));
-    keep_running = -1;
-}
-
-void timeout_handler(int sig)
-{
-    if (child_pid > 0)
-    {
-        kill(child_pid, SIGKILL);
-    }
-}
-
 int handle_run_cmd(int client_sock, p_cmd_t *cmd_pack, char *cmd)
 {
     if (-1 == validate_socket(client_sock))
@@ -275,10 +231,15 @@ int handle_run_cmd(int client_sock, p_cmd_t *cmd_pack, char *cmd)
         // Child Process
         // close listening side
         close(fd[0]);
+        // redirect stderr and stdout to the pipe
         dup2(fd[1], STDOUT_FILENO);
         dup2(fd[1], STDERR_FILENO);
+        // close pipe
         close(fd[1]);
+        // run the command via the shell
+        // execlp closes program when done running
         execlp("sh", "sh", "-c", cmd, (char *)NULL);
+        // will only hit here if error occurs
         perror("execlp failed");
         exit(1);
     }
@@ -286,6 +247,7 @@ int handle_run_cmd(int client_sock, p_cmd_t *cmd_pack, char *cmd)
     {
         // Parent process
         child_pid = pid;
+        // start timer for timeout
         alarm(CMD_TIMEOUT);
         // Close write end
         close(fd[1]);
@@ -296,6 +258,7 @@ int handle_run_cmd(int client_sock, p_cmd_t *cmd_pack, char *cmd)
 
         while (0 < (bytes_read = read(fd[0], buffer, sizeof(buffer))))
         {
+            // reallocate size for response
             char *new_output = realloc(output, total_bytes + bytes_read + 1);
             if (NULL == new_output)
             {
@@ -304,13 +267,14 @@ int handle_run_cmd(int client_sock, p_cmd_t *cmd_pack, char *cmd)
                 close(fd[0]);
                 return -1;
             }
+            // copy output to buffer
             output = new_output;
             memcpy(output + total_bytes, buffer, bytes_read);
             total_bytes += bytes_read;
+            // null terminate
             output[total_bytes] = '\0';
         }
 
-        printf("Buffer:\n%s\nTotal Bytes Read: %ld\n", output, total_bytes);
         size_t total_size = sizeof(p_cmd_t) + total_bytes;
         p_cmd_t *cmd_reply = malloc(total_size);
         if (NULL == cmd_reply)
@@ -319,7 +283,7 @@ int handle_run_cmd(int client_sock, p_cmd_t *cmd_pack, char *cmd)
             free(output);
             return -1;
         }
-
+        // create reply packet, copy data from buffer to cmd
         cmd_reply->header.msg_type = RUN_CMD;
         cmd_reply->header.p_len = htonl(total_bytes);
         memcpy(cmd_reply->cmd, output, total_bytes);
@@ -330,12 +294,14 @@ int handle_run_cmd(int client_sock, p_cmd_t *cmd_pack, char *cmd)
             return -1;
         }
 
-        // cancel alarm if finished.
         free(output);
         free(cmd_reply);
         close(fd[0]);
+        // wait for child process to be reaped
         waitpid(pid, NULL, 0);
+        // cancel alarm if finished.
         alarm(0);
+        // reset atomic
         child_pid = -1;
     }
 
