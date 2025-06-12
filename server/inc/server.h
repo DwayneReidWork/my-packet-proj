@@ -9,6 +9,8 @@
 #define BUFFER_SIZE 1024
 #define MAX_CONNECTIONS 5
 
+int validate_socket(int client_sock);
+
 typedef enum __attribute__((__packed__))
 {
     PING = 1,

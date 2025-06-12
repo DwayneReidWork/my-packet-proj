@@ -1,5 +1,6 @@
-#include "../inc/server.h"
 #include "../inc/netcomm.h"
+#include "../inc/packet.h"
+#include "../inc/server.h"
 
 int main()
 {
