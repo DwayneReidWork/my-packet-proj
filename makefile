@@ -23,4 +23,13 @@ $(EXEC): $(SRCS) $(HDRS)
 clean:
 	rm -f $(EXEC) $(OBJS)
 
+#Valgrind
+v:
+	valgrind -v ./$(EXEC)
+
+#valgrind with leakcheck
+vv:
+	valgrind --leak-check=full ./$(EXEC)
+
+
 .PHONY: all clean

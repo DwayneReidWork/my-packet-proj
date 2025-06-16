@@ -29,7 +29,6 @@ int signal_handler_setup()
     sa.sa_handler = ctrlc_handler;
     sa.sa_flags = 0;
     sigemptyset(&sa.sa_mask);
-    sigaction(SIGINT, &sa, NULL);
     if (sigaction(SIGINT, &sa, NULL) == -1)
     {
         perror("sigaction SIGINT");
@@ -40,7 +39,6 @@ int signal_handler_setup()
     sa_alrm.sa_handler = timeout_handler;
     sa_alrm.sa_flags = 0;
     sigemptyset(&sa_alrm.sa_mask);
-    sigaction(SIGALRM, &sa_alrm, NULL);
     if (sigaction(SIGALRM, &sa_alrm, NULL) == -1)
     {
         perror("sigaction SIGALRM");

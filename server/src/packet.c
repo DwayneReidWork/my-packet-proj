@@ -268,6 +268,14 @@ int handle_list_files(int client_sock)
     send_all(client_sock, reply_buff, reply_size);
     // Free Buffer
     free(reply_buff);
+    // CYCLE THROUGH AND FREE EVERY ONE!
+    for (int i = 0; i < reply_file_list.file_count; ++i)
+    {
+        free(reply_file_list.FileName[i]);
+    }
+    free(reply_file_list.FileName);
+    free(reply_file_list.FileNameLen);
+
     printf("List Sent!\n");
     return 0;
 }

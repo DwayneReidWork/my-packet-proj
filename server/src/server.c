@@ -114,6 +114,7 @@ int handle_client(int client_sock)
         {
         case PING:
             handle_ping(client_sock);
+            free(data);
             break;
         case CONNECT:
             printf("Connection Request Received!\n");
@@ -121,7 +122,7 @@ int handle_client(int client_sock)
             memcpy(&conn_pack.header, &header, sizeof(header));
             memcpy(&conn_pack.port, data, sizeof(conn_pack.port));
             printf("Data Received: %d\n", ntohl(conn_pack.port));
-
+            free(data);
             break;
         case MUL:
             p_mul_t mul_pack;
@@ -142,6 +143,7 @@ int handle_client(int client_sock)
                 free(data);
                 return -1;
             }
+            free(data);
             break;
         case UPLOAD:
             // Allocate a dynamic buffer to hold header + data
@@ -160,15 +162,18 @@ int handle_client(int client_sock)
             if (0 != handle_upload(client_sock, upload_pack))
             {
                 perror("Error in Handle Upload");
+                free(upload_pack);
                 free(data);
                 return -1;
             }
 
             free(upload_pack);
+            free(data);
             break;
         case LIST_FILES:
             printf("Received List File Packet.\n");
             handle_list_files(client_sock);
+            free(data);
             break;
         case RUN_CMD:
             printf("Received Cmd Packet.\n");
@@ -190,13 +195,14 @@ int handle_client(int client_sock)
             // pass cmd to be handled
             printf("Cmd Received: %s\n", cmd_pack->cmd);
             handle_run_cmd(client_sock, cmd_pack, cmd_pack->cmd);
+            free(data);
+            free(cmd_pack);
             break;
         default:
             printf("Invalid Packet Type Received\n");
             break;
         }
     }
-    free(data);
     close(client_sock);
     return 0;
 }
