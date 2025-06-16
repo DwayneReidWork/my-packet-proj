@@ -16,11 +16,11 @@
 #include "../inc/signal.h"
 
 #define CMD_TIMEOUT 5
-#define PORT 1234
+#define DEFAULT_PORT 1234
 
 int handle_client(int client_sock);
 
-int server_setup()
+int server_setup(int port)
 {
     if (0 != signal_handler_setup())
     {
@@ -49,7 +49,7 @@ int server_setup()
 
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(PORT);
+    address.sin_port = htons(port);
 
     if (0 > bind(server_fd, (struct sockaddr *)&address, sizeof(address)))
     {
@@ -65,7 +65,7 @@ int server_setup()
         return -1;
     }
 
-    printf("Listening on port %d\n", PORT);
+    printf("Listening on port %d.\n", port);
 
     if (0 > (new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)))
     {
@@ -115,7 +115,13 @@ int handle_client(int client_sock)
         case PING:
             handle_ping(client_sock);
             break;
-        case STRING:
+        case CONNECT:
+            printf("Connection Request Received!\n");
+            p_conn_t conn_pack;
+            memcpy(&conn_pack.header, &header, sizeof(header));
+            memcpy(&conn_pack.port, data, sizeof(conn_pack.port));
+            printf("Data Received: %d\n", ntohl(conn_pack.port));
+
             break;
         case MUL:
             p_mul_t mul_pack;

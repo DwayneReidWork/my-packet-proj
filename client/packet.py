@@ -3,6 +3,7 @@ import struct
 
 class PacketType(IntEnum):
     PING = 1
+    CONNECT = auto()
     STRING = auto()
     MUL = auto()
     UPLOAD = auto()
@@ -33,6 +34,18 @@ class Ping(Packet):
     def pack(self) -> bytes:
         # Format: Network(Big-endian + Single Byte)
         return super().pack()
+    
+class Connect(Packet):
+    def __init__(self, port: int):
+        super().__init__(PacketType.CONNECT)
+        self.port = port
+
+    def packet_size(self):
+        return struct.calcsize('!i')
+
+    def pack(self) -> bytes:
+        # Format: Network(Big-endian + Single Byte)
+        return super().pack() + struct.pack('!i', self.port)
     
 
 class Multiply(Packet):

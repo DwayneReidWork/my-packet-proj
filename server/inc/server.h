@@ -4,16 +4,18 @@
 #include <netinet/in.h>
 #include <sys/types.h>
 
-#define PORT 1234
-#define PORT_STR "1234"
+#define DEFAULT_PORT 1234
+#define DEFAULT_PORT_STR "1234"
 #define BUFFER_SIZE 1024
 #define MAX_CONNECTIONS 5
 
+int server_setup(int port);
 int validate_socket(int client_sock);
 
 typedef enum __attribute__((__packed__))
 {
     PING = 1,
+    CONNECT,
     STRING,
     MUL,
     UPLOAD,
@@ -28,6 +30,13 @@ typedef struct __attribute__((__packed__))
     PacketType msg_type;
     uint32_t p_len;
 } p_header_t;
+
+// Conn Packet Format
+typedef struct __attribute__((__packed__))
+{
+    p_header_t header;
+    uint32_t port;
+} p_conn_t;
 
 // Mul Packet Format
 typedef struct __attribute__((__packed__))
@@ -58,7 +67,5 @@ typedef struct __attribute__((__packed__))
     p_header_t header;
     char cmd[];
 } p_cmd_t;
-
-int server_setup();
 
 #endif

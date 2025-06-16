@@ -2,8 +2,14 @@
 #include "../inc/packet.h"
 #include "../inc/server.h"
 
-int main()
+int main(int argc, char *argv[])
 {
-    server_setup();
+    int port = DEFAULT_PORT;
+    if (1 < argc)
+    {
+        port = atoi(argv[1]);
+    }
+
+    server_setup(port);
     return 0;
 }

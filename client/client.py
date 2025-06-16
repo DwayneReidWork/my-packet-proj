@@ -1,14 +1,17 @@
 import cmd2
 import socket
+import ssl
 import struct
 from .netcomm import send_all, recv_expected
-from .packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd
+from .packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd, Connect
 # from netcomm import send_all, recv_expected
-# from packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd
+# from packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd, Connect
 
 MAX_LIST_SIZE = 128
 MAX_FNAME_SIZE = 256
 
+# context = ssl._create_unverified_context(ssl.PROTOCOL_TLS_CLIENT)
+# context.load_verify_locations("/ssl/certs/ca-certificates")
 
 class Client():
     def __init__(self,client_socket: socket.socket, address:tuple[str,int]):   
@@ -23,10 +26,18 @@ class CmdController(cmd2.Cmd):
         self.sock = None
         self.debug = True
 
+    port_parser = cmd2.Cmd2ArgumentParser()
+    port_parser.add_argument('port', type=int, nargs='?', action='store', default = 1234, help='What port would you like to connect to?')
+    @cmd2.with_argparser(port_parser)
     def do_connect(self, args):
-        connection = ("127.0.0.1", 1234)
+        connection = ("127.0.0.1", args.port)
+        # unwrapped_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # self.sock = context.wrap_socket(unwrapped_sock)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect(connection)
+
+        connection_packet = Connect(args.port).pack()
+        send_all(self.sock, connection_packet)
     
     def do_ping(self, args):
         if self.sock is None:
