@@ -10,15 +10,6 @@ from .packet import PacketType, Multiply, Ping, Upload, List_Files, Run_Cmd, Con
 MAX_LIST_SIZE = 128
 MAX_FNAME_SIZE = 256
 
-# context = ssl._create_unverified_context(ssl.PROTOCOL_TLS_CLIENT)
-# context.load_verify_locations("/ssl/certs/ca-certificates")
-
-class Client():
-    def __init__(self,client_socket: socket.socket, address:tuple[str,int]):   
-        super().__init__()
-        self.client_socket = client_socket
-        self.address = address
-
 class CmdController(cmd2.Cmd):
     
     def __init__(self):
@@ -31,8 +22,6 @@ class CmdController(cmd2.Cmd):
     @cmd2.with_argparser(port_parser)
     def do_connect(self, args):
         connection = ("127.0.0.1", args.port)
-        # unwrapped_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # self.sock = context.wrap_socket(unwrapped_sock)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect(connection)
 
@@ -52,7 +41,7 @@ class CmdController(cmd2.Cmd):
         if packet_type == PacketType.PING:
             if expected_len != 0:
                 print(f"Expected 0-length ping response, got {expected_len}")
-                _ = recv_expected(self.sock, expected_len)  # Drain extra if sent
+                _ = recv_expected(self.sock, expected_len) # Drain extra if sent
             print('Ping Successful!')
         else:
             print(f"Unexpected packet type: {packet_type}")
