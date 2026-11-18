@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <dirent.h>
+#include <errno.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,8 +19,6 @@
 #define CMD_TIMEOUT 5
 #define DEFAULT_PORT 1234
 
-int handle_client(int client_sock);
-
 int server_setup(int port)
 {
     if (0 != signal_handler_setup())
@@ -34,60 +33,43 @@ int server_setup(int port)
     int status = 0;
     int addrlen = sizeof(address);
 
-    if (-1 == (server_fd = socket(AF_INET, SOCK_STREAM, 0)))
-    {
-        perror("Socket Failure");
-        return -1;
-    }
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    ERRORMSG_FAIL_RET_EQUALS(server_fd, ERROR, "Failed to create socket.");
 
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
-    {
-        perror("setsockopt");
-        close(server_fd);
-        return -1;
-    }
+    status = setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
+
+    ERRORMSG_FAIL_RET_EQUALS(status, ERROR, "Failed to Set Socket Options.");
 
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
 
-    if (0 > bind(server_fd, (struct sockaddr *)&address, sizeof(address)))
-    {
-        perror("bind failed");
-        close(server_fd);
-        return -1;
-    }
+    status = bind(server_fd, (struct sockaddr *)&address, sizeof(address));
+    ERRORMSG_FAIL_RET_EQUALS(status, ERROR, "Failed to Bind.");
 
-    if (0 > listen(server_fd, 3))
-    {
-        perror("listen failed");
-        close(server_fd);
-        return -1;
-    }
+    status = listen(server_fd, 3);
+    ERRORMSG_FAIL_RET_EQUALS(status, ERROR, "Failed to Listen.");
 
     printf("Listening on port %d.\n", port);
 
-    if (0 > (new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)))
-    {
-        perror("accept failed");
-        close(server_fd);
-        return -1;
-    }
+    new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
+    ERRORMSG_FAIL_RET_EQUALS(new_socket, ERROR, "Failed to Accept new socket.");
+
     char host_buff[NI_MAXHOST];
     char port_buff[NI_MAXSERV];
 
-    if (0 != (status = getnameinfo((struct sockaddr *)&(address), addrlen, host_buff, NI_MAXHOST, port_buff, NI_MAXSERV, NI_NUMERICSERV)))
+    status = getnameinfo((struct sockaddr *)&(address), addrlen, host_buff, NI_MAXHOST, port_buff, NI_MAXSERV, NI_NUMERICSERV);
+
+    if (0 != status)
     {
-        fprintf(stderr, "Failed to get name information for client (%d: %s)", status, gai_strerror(status));
-        return -1;
+        status = -1;
+        ERRORMSG_FAIL_RET_EQUALS(status, ERROR, "Failed to Accept new socket.");
     }
 
     printf("Connection Recieved from %s:%s\n", host_buff, port_buff);
 
-    if (0 > handle_client(new_socket))
-    {
-        perror("Error Handling Client");
-    }
+    status = handle_client(new_socket);
+    ERRORMSG_FAIL_RET_EQUALS(status, ERROR, "Failed to handle new client.");
 
     printf("\nShutting down server...\n");
     close(new_socket);

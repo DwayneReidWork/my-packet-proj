@@ -18,14 +18,17 @@ class CmdController(cmd2.Cmd):
         self.debug = True
 
     port_parser = cmd2.Cmd2ArgumentParser()
-    port_parser.add_argument('port', type=int, nargs='?', action='store', default = 1234, help='What port would you like to connect to?')
+    port_parser.add_argument('address', type=str, nargs='?', action='store', default = 1234, help='What port would you like to connect to? Format host:port')
     @cmd2.with_argparser(port_parser)
     def do_connect(self, args):
-        connection = ("127.0.0.1", args.port)
+        host, port = args.address.split(":")
+        print(f"Host: {host}\nPort {port}.")
+        port = int(port)
+        connection = (host, port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect(connection)
 
-        connection_packet = Connect(args.port).pack()
+        connection_packet = Connect(port).pack()
         send_all(self.sock, connection_packet)
     
     def do_ping(self, args):

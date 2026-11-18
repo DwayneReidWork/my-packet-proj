@@ -3,11 +3,23 @@
 
 #include <netinet/in.h>
 #include <sys/types.h>
+#include <errno.h>
 
 #define DEFAULT_PORT 1234
 #define DEFAULT_PORT_STR "1234"
 #define BUFFER_SIZE 1024
 #define MAX_CONNECTIONS 5
+#define ERROR -1
+
+#define ERRORMSG_FAIL_RET_EQUALS(var, val, msg)                \
+    do                                                         \
+    {                                                          \
+        if ((var) == (val))                                    \
+        {                                                      \
+            fprintf(stderr, "%s: %s\n", msg, strerror(errno)); \
+            return ERROR;                                      \
+        }                                                      \
+    } while (0)
 
 int server_setup(int port);
 int validate_socket(int client_sock);

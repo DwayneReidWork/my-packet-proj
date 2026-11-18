@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "*.py": "python",
+        "*.c": "c",
         "main.h": "c",
         "server.h": "c",
         "socket.h": "c",
@@ -9,6 +10,9 @@
         "unistd.h": "c",
         "signal.h": "c",
         "stdint.h": "c",
-        "errno.h": "c"
+        "errno.h": "c",
+        "packet.h": "c",
+        "wait.h": "c",
+        "netcomm.h": "c"
     }
 }
